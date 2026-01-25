@@ -84,6 +84,7 @@ export async function sendPrompt(
   return new Promise((resolve, reject) => {
     let fullResponse = '';
     let hasResolved = false;
+    let timeoutHandle: NodeJS.Timeout;
 
     // Set up event handler
     currentSession!.on((event) => {
@@ -116,12 +117,14 @@ export async function sendPrompt(
         // Don't resolve here - wait for session.idle
       } else if (eventType === 'session.idle') {
         // Session is done
+        clearTimeout(timeoutHandle);
         if (!hasResolved) {
           hasResolved = true;
           options.onComplete?.();
           resolve(fullResponse);
         }
       } else if (eventType === 'session.error' || eventType === 'error') {
+        clearTimeout(timeoutHandle);
         const error = new Error(eventData?.message || 'Unknown error');
         options.onError?.(error);
         if (!hasResolved) {
@@ -131,25 +134,26 @@ export async function sendPrompt(
       }
     });
 
-    // Send the prompt and handle the response stream directly
-    currentSession!.send({ prompt }).then((response: any) => {
-      // send() returns a message ID, not content - ignore it
-      // Content comes via events
-    }).catch((err: Error) => {
-      if (!hasResolved) {
-        hasResolved = true;
-        reject(err);
-      }
-    });
-
     // Timeout fallback
-    setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       if (!hasResolved) {
         hasResolved = true;
         options.onComplete?.();
         resolve(fullResponse);
       }
     }, 120000); // 2 minute timeout
+
+    // Send the prompt and handle the response stream directly
+    currentSession!.send({ prompt }).then((response: any) => {
+      // send() returns a message ID, not content - ignore it
+      // Content comes via events
+    }).catch((err: Error) => {
+      clearTimeout(timeoutHandle);
+      if (!hasResolved) {
+        hasResolved = true;
+        reject(err);
+      }
+    });
   });
 }
 

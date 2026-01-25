@@ -40,9 +40,12 @@ export function getGitRepoFromCwd(): { owner: string; repo: string } | null {
   }
 }
 
-export async function runGh(args: string[]): Promise<string> {
+export async function runGh(args: string[], options?: { cwd?: string }): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('gh', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const proc = spawn('gh', args, { 
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: options?.cwd,
+    });
     let stdout = '';
     let stderr = '';
 
@@ -154,7 +157,7 @@ export async function getPullRequest(repo: Repository, number: number): Promise<
 }
 
 export async function checkoutPR(number: number, cwd: string): Promise<void> {
-  await runGh(['pr', 'checkout', String(number)]);
+  await runGh(['pr', 'checkout', String(number)], { cwd });
 }
 
 export async function createPR(title: string, body: string, base?: string): Promise<string> {

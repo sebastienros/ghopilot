@@ -84,6 +84,18 @@ export async function startRepl(config: Config): Promise<void> {
       let input = '';
       let selectedIndex = 0;
       let filteredCommands = commands;
+      let rawModeSet = false;
+      
+      const resetRawMode = () => {
+        if (rawModeSet && process.stdin.isTTY) {
+          try {
+            process.stdin.setRawMode(false);
+          } catch {
+            // Ignore errors resetting raw mode
+          }
+          rawModeSet = false;
+        }
+      };
       
       const getFiltered = () => {
         const term = input.toLowerCase().trim();
@@ -161,9 +173,7 @@ export async function startRepl(config: Config): Promise<void> {
         // Move back up and clear input line
         process.stdout.write(`\x1b[${linesToClear}A\x1b[2K\x1b[G`);
         
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
-        }
+        resetRawMode();
         process.stdin.removeListener('data', onData);
       };
       
@@ -248,6 +258,7 @@ export async function startRepl(config: Config): Promise<void> {
       
       if (process.stdin.isTTY) {
         process.stdin.setRawMode(true);
+        rawModeSet = true;
       }
       process.stdin.resume();
       process.stdin.on('data', onData);
@@ -314,8 +325,22 @@ export async function startRepl(config: Config): Promise<void> {
 
 function waitForSlashKey(): Promise<string> {
   return new Promise((resolve) => {
+    let rawModeSet = false;
+    
+    const resetRawMode = () => {
+      if (rawModeSet && process.stdin.isTTY) {
+        try {
+          process.stdin.setRawMode(false);
+        } catch {
+          // Ignore errors resetting raw mode
+        }
+        rawModeSet = false;
+      }
+    };
+    
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
+      rawModeSet = true;
     }
     process.stdin.resume();
     
@@ -325,9 +350,7 @@ function waitForSlashKey(): Promise<string> {
       // Ctrl+C
       if (char === '\x03') {
         process.stdin.removeListener('data', onData);
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
-        }
+        resetRawMode();
         resolve('exit');
         return;
       }
@@ -335,9 +358,7 @@ function waitForSlashKey(): Promise<string> {
       // "/" key
       if (char === '/') {
         process.stdin.removeListener('data', onData);
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
-        }
+        resetRawMode();
         resolve('/');
         return;
       }

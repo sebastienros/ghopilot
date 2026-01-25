@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { spawnSync } from 'child_process';
 import type { Command, CommandContext } from '../types/index.js';
 import { createWorktree, checkAndSwitchWorktree } from './worktrees.js';
 import { getIssue, getPullRequest, checkoutPR } from '../utils/github.js';
@@ -6,6 +7,12 @@ import { streamToConsole, runWithNewSession } from '../utils/copilot.js';
 import { getPrompt, renderPrompt, buildPromptContext } from '../utils/prompts.js';
 import { getRepoLocalPath, formatBranchName } from '../utils/config.js';
 import { confirm } from '@inquirer/prompts';
+
+// Validate branch name to prevent command injection
+function isValidBranchName(name: string): boolean {
+  // Git branch names: alphanumeric, dash, underscore, slash, dot (no spaces or shell metacharacters)
+  return /^[a-zA-Z0-9._\/-]+$/.test(name);
+}
 
 function getRepoCwd(context: CommandContext): string | undefined {
   if (context.config.activeRepository) {
@@ -286,15 +293,15 @@ export const submitPrCommand: Command = {
     const issue = await getIssue(context.config.activeRepository, number);
     // Use context.cwd which should be the worktree path, not the main repo
     const repoCwd = context.cwd;
-    const { execSync } = await import('child_process');
     
     // Verify we're in a worktree, not the main repo
     try {
-      const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+      const result = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
         cwd: repoCwd,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe']
-      }).trim();
+      });
+      const currentBranch = (result.stdout || '').trim();
       
       if (currentBranch === 'main' || currentBranch === 'master') {
         console.log(chalk.yellow('You are on the main branch, not a worktree.'));
@@ -309,24 +316,25 @@ export const submitPrCommand: Command = {
     
     // Check for uncommitted changes and commit them
     try {
-      const status = execSync('git status --porcelain', {
+      const statusResult = spawnSync('git', ['status', '--porcelain'], {
         cwd: repoCwd,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe']
-      }).trim();
+      });
+      const status = (statusResult.stdout || '').trim();
       
       if (status) {
         console.log(chalk.cyan('📦 Uncommitted changes detected. Committing...\n'));
         
         // Stage all changes
-        execSync('git add -A', { cwd: repoCwd, stdio: 'pipe' });
+        spawnSync('git', ['add', '-A'], { cwd: repoCwd, stdio: 'pipe' });
         
-        // Generate commit message
+        // Generate commit message (safe - passed as array argument)
         const commitMsg = issue 
           ? `fix: ${issue.title} (#${number})`
           : `fix: Issue #${number}`;
         
-        execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, {
+        spawnSync('git', ['commit', '-m', commitMsg], {
           cwd: repoCwd,
           stdio: 'inherit',
         });
@@ -339,17 +347,25 @@ export const submitPrCommand: Command = {
     
     // Check if there are any commits to submit
     try {
-      const baseBranch = execSync('git rev-parse --abbrev-ref origin/HEAD', { 
+      const baseResult = spawnSync('git', ['rev-parse', '--abbrev-ref', 'origin/HEAD'], { 
         cwd: repoCwd, 
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe']
-      }).trim().replace('origin/', '');
+      });
+      const baseBranch = (baseResult.stdout || '').trim().replace('origin/', '');
       
-      const diffCount = execSync(`git rev-list --count ${baseBranch}..HEAD`, {
+      // Validate branch name before using it
+      if (!isValidBranchName(baseBranch)) {
+        console.log(chalk.red('Invalid base branch name detected.'));
+        return;
+      }
+      
+      const diffResult = spawnSync('git', ['rev-list', '--count', `${baseBranch}..HEAD`], {
         cwd: repoCwd,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe']
-      }).trim();
+      });
+      const diffCount = (diffResult.stdout || '').trim();
       
       if (diffCount === '0') {
         console.log(chalk.yellow('No commits to submit. Make some changes first.'));
@@ -405,14 +421,17 @@ export const submitPrCommand: Command = {
       return;
     }
 
-    // Submit via gh
+    // Submit via gh (safe - passed as array arguments)
     try {
-      const { execSync } = await import('child_process');
-      execSync(`gh pr create --title "${prTitle.trim().replace(/"/g, '\\"')}" --body "${prDescription.trim().replace(/"/g, '\\"')}"`, {
+      const result = spawnSync('gh', ['pr', 'create', '--title', prTitle.trim(), '--body', prDescription.trim()], {
         cwd: context.cwd,
         stdio: 'inherit',
       });
-      console.log(chalk.green('\n✓ PR submitted successfully!'));
+      if (result.status === 0) {
+        console.log(chalk.green('\n✓ PR submitted successfully!'));
+      } else {
+        console.log(chalk.red('Failed to submit PR. You can submit manually with: gh pr create'));
+      }
     } catch (error) {
       console.log(chalk.red('Failed to submit PR. You can submit manually with: gh pr create'));
     }
