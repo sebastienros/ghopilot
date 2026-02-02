@@ -51,11 +51,19 @@ export async function initCopilotClient(cwd?: string): Promise<CopilotClient> {
 
 export async function stopCopilotClient(): Promise<void> {
   if (currentSession) {
-    await currentSession.destroy();
+    try {
+      await currentSession.destroy();
+    } catch {
+      // Ignore errors during destroy - session may already be closed
+    }
     currentSession = null;
   }
   if (client) {
-    await client.stop();
+    try {
+      await client.stop();
+    } catch {
+      // Ignore errors during stop - client may already be stopped
+    }
     client = null;
   }
 }
@@ -81,13 +89,21 @@ export async function sendPrompt(
     currentSession = await c.createSession(sessionConfig);
   }
 
+  // Capture the session reference to detect if it changes during async operations
+  const session = currentSession;
+
   return new Promise((resolve, reject) => {
     let fullResponse = '';
     let hasResolved = false;
     let timeoutHandle: NodeJS.Timeout;
 
     // Set up event handler
-    currentSession!.on((event) => {
+    session.on((event) => {
+      // Ignore events if session has been replaced or destroyed
+      if (currentSession !== session || hasResolved) {
+        return;
+      }
+      
       const eventType = event.type as string;
       const eventData = (event as any).data;
       
@@ -144,14 +160,20 @@ export async function sendPrompt(
     }, 120000); // 2 minute timeout
 
     // Send the prompt and handle the response stream directly
-    currentSession!.send({ prompt }).then((response: any) => {
+    session.send({ prompt }).then((response: any) => {
       // send() returns a message ID, not content - ignore it
       // Content comes via events
     }).catch((err: Error) => {
       clearTimeout(timeoutHandle);
       if (!hasResolved) {
         hasResolved = true;
-        reject(err);
+        // Ignore stream destroyed errors - these happen when session is replaced
+        if (err.message?.includes('stream was destroyed')) {
+          options.onComplete?.();
+          resolve(fullResponse);
+        } else {
+          reject(err);
+        }
       }
     });
   });
@@ -169,7 +191,11 @@ export async function runWithNewSession(
 ): Promise<string> {
   // Destroy existing session to start fresh
   if (currentSession) {
-    await currentSession.destroy();
+    try {
+      await currentSession.destroy();
+    } catch {
+      // Ignore errors during destroy - session may already be closed
+    }
     currentSession = null;
   }
   return sendPrompt(prompt, options);
@@ -178,7 +204,7 @@ export async function runWithNewSession(
 // Stream response to console with real-time output
 export async function streamToConsole(
   prompt: string,
-  options: { model?: string; showThinking?: boolean; formatMarkdown?: boolean; cwd?: string } = {}
+  options: { model?: string; showThinking?: boolean; formatMarkdown?: boolean; cwd?: string; freshSession?: boolean } = {}
 ): Promise<string> {
   let isFirstChunk = true;
   const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -201,7 +227,8 @@ export async function streamToConsole(
   };
 
   try {
-    await sendPrompt(prompt, {
+    const send = options.freshSession ? runWithNewSession : sendPrompt;
+    await send(prompt, {
       model: options.model,
       cwd: options.cwd,
       onMessage: (content) => {

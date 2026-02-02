@@ -15,6 +15,11 @@ function isValidBranchName(name: string): boolean {
 }
 
 function getRepoCwd(context: CommandContext): string | undefined {
+  // Use context.cwd if we're in a worktree (cwd is set when selecting/creating worktrees)
+  // This ensures AI commands operate on the worktree, not the main repo
+  if (context.config.activeIssue || context.config.activePR) {
+    return context.cwd;
+  }
   if (context.config.activeRepository) {
     return getRepoLocalPath(
       context.config, 
@@ -85,7 +90,7 @@ export const fixCommand: Command = {
         const promptContext = buildPromptContext(context.config, { issue, branch: branchName });
         const renderedPrompt = renderPrompt(planPrompt.content, promptContext);
         
-        await streamToConsole(renderedPrompt, { showThinking: true, cwd: getRepoCwd(context) });
+        await streamToConsole(renderedPrompt, { model: context.config.defaultModel || undefined, showThinking: true, cwd: getRepoCwd(context), freshSession: true });
       }
 
       console.log();
@@ -108,7 +113,7 @@ export const fixCommand: Command = {
         const renderedPrompt = renderPrompt(fixPrompt.content, promptContext);
         
         // Use worktree path for agentic file editing
-        await streamToConsole(renderedPrompt, { showThinking: true, cwd: worktreePath });
+        await streamToConsole(renderedPrompt, { model: context.config.defaultModel || undefined, showThinking: true, cwd: worktreePath });
       }
 
       console.log();
@@ -142,8 +147,8 @@ export const reviewCommand: Command = {
       return;
     }
 
-    // Parse model option
-    let model: string | undefined;
+    // Parse model option, fall back to config default
+    let model: string | undefined = context.config.defaultModel || undefined;
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--model' && args[i + 1]) {
         model = args[i + 1];
@@ -179,6 +184,33 @@ export const reviewCommand: Command = {
     }
 
     console.log();
+
+    // Ask if user wants to fix the issues
+    const shouldFix = await confirm({
+      message: 'Fix the issues found in the review?',
+      default: false,
+    });
+
+    if (shouldFix) {
+      console.log(chalk.cyan('\n🔧 Fixing review issues...\n'));
+      
+      const fixReviewPrompt = await getPrompt('fix-review');
+      if (fixReviewPrompt) {
+        const issue = context.config.activeIssue ? await getIssue(context.config.activeRepository!, context.config.activeIssue) : undefined;
+        const pr = context.config.activePR ? await getPullRequest(context.config.activeRepository!, context.config.activePR) : undefined;
+        
+        const promptContext = buildPromptContext(context.config, { issue: issue ?? undefined, pr: pr ?? undefined });
+        const renderedPrompt = renderPrompt(fixReviewPrompt.content, promptContext);
+        
+        await streamToConsole(renderedPrompt, { model, showThinking: true, cwd: getRepoCwd(context) });
+      }
+      
+      console.log();
+      console.log(chalk.green('✓ Review fixes applied.'));
+      console.log(chalk.gray('Use /review again to verify, or /submit to create a PR.'));
+    }
+
+    console.log();
   },
 };
 
@@ -203,11 +235,12 @@ export const testCommand: Command = {
     if (testPrompt) {
       const issue = context.config.activeIssue ? await getIssue(context.config.activeRepository, context.config.activeIssue) : undefined;
       const pr = context.config.activePR ? await getPullRequest(context.config.activeRepository, context.config.activePR) : undefined;
+      const worktreePath = getRepoCwd(context);
       
-      const promptContext = buildPromptContext(context.config, { issue: issue ?? undefined, pr: pr ?? undefined });
+      const promptContext = buildPromptContext(context.config, { issue: issue ?? undefined, pr: pr ?? undefined, worktree_path: worktreePath });
       const renderedPrompt = renderPrompt(testPrompt.content, promptContext);
       
-      await streamToConsole(renderedPrompt, { showThinking: true, cwd: getRepoCwd(context) });
+      await streamToConsole(renderedPrompt, { model: context.config.defaultModel || undefined, showThinking: true, cwd: worktreePath });
     }
 
     console.log();
@@ -239,7 +272,7 @@ export const verifyCommand: Command = {
       const promptContext = buildPromptContext(context.config, { issue: issue ?? undefined, pr: pr ?? undefined });
       const renderedPrompt = renderPrompt(verifyPrompt.content, promptContext);
       
-      await streamToConsole(renderedPrompt, { showThinking: true, cwd: getRepoCwd(context) });
+      await streamToConsole(renderedPrompt, { model: context.config.defaultModel || undefined, showThinking: true, cwd: getRepoCwd(context) });
     }
 
     console.log();
@@ -472,7 +505,7 @@ export const explainCommand: Command = {
           pr: pr ?? undefined 
         });
         const renderedPrompt = renderPrompt(explainPrompt.content, promptContext);
-        await streamToConsole(renderedPrompt, { showThinking: true, cwd: getRepoCwd(context) });
+        await streamToConsole(renderedPrompt, { model: context.config.defaultModel || undefined, showThinking: true, cwd: getRepoCwd(context), freshSession: true });
       }
     } else if (context.config.activeIssue) {
       const number = context.config.activeIssue;
@@ -488,7 +521,7 @@ export const explainCommand: Command = {
       if (explainPrompt) {
         const promptContext = buildPromptContext(context.config, { issue: issue ?? undefined });
         const renderedPrompt = renderPrompt(explainPrompt.content, promptContext);
-        await streamToConsole(renderedPrompt, { showThinking: true, cwd: getRepoCwd(context) });
+        await streamToConsole(renderedPrompt, { model: context.config.defaultModel || undefined, showThinking: true, cwd: getRepoCwd(context) });
       }
     } else {
       console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one first.'));

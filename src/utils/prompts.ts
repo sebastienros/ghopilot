@@ -22,6 +22,7 @@ export interface PromptContext {
   branch?: string;
   username?: string;
   prefix?: string;
+  worktree_path?: string;
 }
 
 // Default prompts stored in code
@@ -85,10 +86,10 @@ Perform a thorough code review focusing on:
 Provide specific, actionable feedback with file and line references.`,
   },
 
-  test: {
-    name: 'test',
-    description: 'Prompt for generating tests',
-    content: `Generate comprehensive tests for the changes in {{repo}}.
+  'fix-review': {
+    name: 'fix-review',
+    description: 'Prompt for fixing issues from code review',
+    content: `Fix the issues identified in the code review for {{repo}}.
 
 {{#if pr_number}}
 **PR #{{pr_number}}:** {{pr_title}}
@@ -98,13 +99,41 @@ Provide specific, actionable feedback with file and line references.`,
 **Related Issue #{{issue_number}}:** {{issue_title}}
 {{/if}}
 
-Create tests that cover:
+Review the code changes in this branch and fix any issues related to:
+1. Correctness - Fix any bugs or logic errors
+2. Security - Address any security vulnerabilities
+3. Performance - Optimize any performance issues
+4. Maintainability - Improve code structure and clarity
+5. Edge cases - Handle any missing edge cases
+
+Make the necessary changes to the files. Do not just describe the fixes - actually edit the files.`,
+  },
+
+  test: {
+    name: 'test',
+    description: 'Prompt for generating tests',
+    content: `Create and save comprehensive test files for the changes in {{repo}}.
+
+{{#if worktree_path}}
+**Worktree:** {{worktree_path}}
+{{/if}}
+
+{{#if pr_number}}
+**PR #{{pr_number}}:** {{pr_title}}
+{{/if}}
+
+{{#if issue_number}}
+**Related Issue #{{issue_number}}:** {{issue_title}}
+{{/if}}
+
+Analyze the changes and create test files that cover:
 1. Happy path scenarios
 2. Edge cases and boundary conditions
 3. Error handling and failure modes
 4. Integration with existing code
 
-Follow the existing test patterns and frameworks used in the repository.`,
+Follow the existing test patterns and frameworks used in the repository.
+Write the test files to disk - do not just describe them.`,
   },
 
   verify: {
@@ -320,6 +349,7 @@ export function buildPromptContext(
     issue?: Issue;
     pr?: PullRequest;
     branch?: string;
+    worktree_path?: string;
   } = {}
 ): PromptContext {
   const repo = config.activeRepository;
@@ -335,5 +365,6 @@ export function buildPromptContext(
     branch: options.branch,
     username: config.username ?? undefined,
     prefix: config.branchPrefix ?? undefined,
+    worktree_path: options.worktree_path,
   };
 }

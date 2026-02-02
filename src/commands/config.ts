@@ -48,8 +48,10 @@ function showConfig(context: CommandContext): void {
   console.log(chalk.gray('  username: '), context.config.username || chalk.yellow('(not set)'));
   console.log(chalk.gray('  prefix:   '), context.config.branchPrefix || chalk.yellow('(not set)'));
   console.log(chalk.gray('  repospath:'), getReposPath(context.config));
+  console.log(chalk.gray('  model:    '), context.config.defaultModel || chalk.yellow('(system default)'));
   console.log();
   console.log(chalk.gray('  Use /prompts to view and customize prompt templates.'));
+  console.log(chalk.gray('  Use /models to list available models.'));
   console.log();
 }
 

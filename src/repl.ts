@@ -11,6 +11,7 @@ import { prCommand, prsCommand } from './commands/prs.js';
 import { worktreeCommand, worktreesCommand } from './commands/worktrees.js';
 import { helpCommand, exitCommand } from './commands/help.js';
 import { fixCommand, reviewCommand, testCommand, verifyCommand, checkoutCommand, submitPrCommand, explainCommand } from './commands/ai.js';
+import { modelCommand, modelsCommand } from './commands/model.js';
 
 // Register all commands
 registerCommand(repoCommand);
@@ -33,6 +34,8 @@ registerCommand(verifyCommand);
 registerCommand(checkoutCommand);
 registerCommand(submitPrCommand);
 registerCommand(explainCommand);
+registerCommand(modelCommand);
+registerCommand(modelsCommand);
 
 export async function startRepl(config: Config): Promise<void> {
   let currentConfig = config;
@@ -338,7 +341,15 @@ function waitForSlashKey(): Promise<string> {
       }
     };
     
+    // Ensure stdin is in a clean state before listening
+    // This fixes issues after @inquirer/prompts leaves stdin in an inconsistent state
+    process.stdin.pause();
     if (process.stdin.isTTY) {
+      try {
+        process.stdin.setRawMode(false);
+      } catch {
+        // Ignore if not in raw mode
+      }
       process.stdin.setRawMode(true);
       rawModeSet = true;
     }

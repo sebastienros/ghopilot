@@ -15,6 +15,7 @@ export interface Config {
   username: string | null;
   branchPrefix: string | null;
   reposPath: string | null;
+  defaultModel: string | null;
 }
 
 export interface CommandArg {

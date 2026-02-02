@@ -92,6 +92,9 @@ export function getWorktrees(context: CommandContext): Worktree[] {
 
     const lines = output.split('\n');
     let currentWorktree: Partial<Worktree> = {};
+    
+    // Get the active repository name to filter worktrees
+    const activeRepoName = context.config.activeRepository?.repo;
 
     for (const line of lines) {
       if (line.startsWith('worktree ')) {
@@ -100,8 +103,11 @@ export function getWorktrees(context: CommandContext): Worktree[] {
         currentWorktree.branch = line.slice(7).replace('refs/heads/', '');
       } else if (line === '') {
         if (currentWorktree.path && currentWorktree.branch) {
-          // Check if it's a ghopilot worktree
-          const match = currentWorktree.path.match(/-ghopilot-(\d+)$/);
+          // Check if it's a ghopilot worktree for the active repository
+          const repoPattern = activeRepoName 
+            ? new RegExp(`${activeRepoName}-ghopilot-(\\d+)$`)
+            : /-ghopilot-(\d+)$/;
+          const match = currentWorktree.path.match(repoPattern);
           if (match) {
             worktrees.push({
               path: currentWorktree.path,

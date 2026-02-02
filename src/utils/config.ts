@@ -16,6 +16,7 @@ const DEFAULT_CONFIG: Config = {
   username: null,
   branchPrefix: null,
   reposPath: null,
+  defaultModel: null,
 };
 
 export async function ensureConfigDir(): Promise<void> {
