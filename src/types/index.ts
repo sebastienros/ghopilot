@@ -7,6 +7,26 @@ export interface Repository {
   localPath?: string;
 }
 
+export interface Note {
+  id: string;
+  owner: string;
+  repo: string;
+  number: number;
+  type: 'issue' | 'pr';
+  title: string;
+  summary: string;
+  review?: string;
+  discussion: NoteEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoteEntry {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
 export interface Config {
   repositories: Repository[];
   activeRepository: Repository | null;
@@ -16,6 +36,24 @@ export interface Config {
   branchPrefix: string | null;
   reposPath: string | null;
   defaultModel: string | null;
+  flagged: FlaggedItem[];
+  pinned: PinnedItem[];
+}
+
+export interface FlaggedItem {
+  owner: string;
+  repo: string;
+  number: number;
+  type: 'issue' | 'pr';
+  flaggedAt: string;
+}
+
+export interface PinnedItem {
+  owner: string;
+  repo: string;
+  number: number;
+  type: 'issue' | 'pr';
+  pinnedAt: string;
 }
 
 export interface CommandArg {

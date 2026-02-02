@@ -5,7 +5,7 @@ import { createWorktree, checkAndSwitchWorktree } from './worktrees.js';
 import { getIssue, getPullRequest, checkoutPR } from '../utils/github.js';
 import { streamToConsole, runWithNewSession } from '../utils/copilot.js';
 import { getPrompt, renderPrompt, buildPromptContext } from '../utils/prompts.js';
-import { getRepoLocalPath, formatBranchName } from '../utils/config.js';
+import { getRepoLocalPath, formatBranchName, createOrUpdateNote } from '../utils/config.js';
 import { confirm } from '@inquirer/prompts';
 
 // Validate branch name to prevent command injection
@@ -141,6 +141,7 @@ export const reviewCommand: Command = {
       return;
     }
 
+    const repo = context.config.activeRepository;
     const number = context.config.activePR || context.config.activeIssue;
     if (!number) {
       console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one.'));
@@ -173,14 +174,32 @@ export const reviewCommand: Command = {
 
     const reviewPrompt = await getPrompt('review');
     if (reviewPrompt) {
-      const issue = context.config.activeIssue ? await getIssue(context.config.activeRepository, context.config.activeIssue) : undefined;
-      const pr = context.config.activePR ? await getPullRequest(context.config.activeRepository, context.config.activePR) : undefined;
+      const issue = context.config.activeIssue ? await getIssue(repo, context.config.activeIssue) : undefined;
+      const pr = context.config.activePR ? await getPullRequest(repo, context.config.activePR) : undefined;
       
       const promptContext = buildPromptContext(context.config, { issue: issue ?? undefined, pr: pr ?? undefined });
       const renderedPrompt = renderPrompt(reviewPrompt.content, promptContext);
       
+      // Capture the review output
+      let reviewOutput = '';
+      const originalWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = (chunk: any) => {
+        if (typeof chunk === 'string') {
+          reviewOutput += chunk;
+        }
+        return originalWrite(chunk);
+      };
+      
       // Use different model for review if specified
       await streamToConsole(renderedPrompt, { model, showThinking: true, cwd: getRepoCwd(context) });
+      
+      process.stdout.write = originalWrite;
+      
+      // Save review to notes
+      const type = context.config.activePR ? 'pr' : 'issue';
+      const title = pr?.title || issue?.title || `#${number}`;
+      await createOrUpdateNote(repo.owner, repo.repo, number, type, title, { review: reviewOutput.trim() });
+      console.log(chalk.gray('\n✓ Review saved to notes. Use /note to view or continue discussion.'));
     }
 
     console.log();
@@ -481,6 +500,19 @@ export const explainCommand: Command = {
     }
 
     const repo = context.config.activeRepository;
+    let explainOutput = '';
+    
+    // Helper to capture output
+    const captureOutput = () => {
+      const originalWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = (chunk: any) => {
+        if (typeof chunk === 'string') {
+          explainOutput += chunk;
+        }
+        return originalWrite(chunk);
+      };
+      return () => { process.stdout.write = originalWrite; };
+    };
     
     // Check if we have an active PR or issue
     if (context.config.activePR) {
@@ -505,7 +537,14 @@ export const explainCommand: Command = {
           pr: pr ?? undefined 
         });
         const renderedPrompt = renderPrompt(explainPrompt.content, promptContext);
+        
+        const restore = captureOutput();
         await streamToConsole(renderedPrompt, { model: context.config.defaultModel || undefined, showThinking: true, cwd: getRepoCwd(context), freshSession: true });
+        restore();
+        
+        // Save to notes
+        await createOrUpdateNote(repo.owner, repo.repo, number, 'pr', pr.title, { summary: explainOutput.trim() });
+        console.log(chalk.gray('\n✓ Summary saved to notes. Use /note to view or continue discussion.'));
       }
     } else if (context.config.activeIssue) {
       const number = context.config.activeIssue;
@@ -521,7 +560,14 @@ export const explainCommand: Command = {
       if (explainPrompt) {
         const promptContext = buildPromptContext(context.config, { issue: issue ?? undefined });
         const renderedPrompt = renderPrompt(explainPrompt.content, promptContext);
+        
+        const restore = captureOutput();
         await streamToConsole(renderedPrompt, { model: context.config.defaultModel || undefined, showThinking: true, cwd: getRepoCwd(context) });
+        restore();
+        
+        // Save to notes
+        await createOrUpdateNote(repo.owner, repo.repo, number, 'issue', issue.title, { summary: explainOutput.trim() });
+        console.log(chalk.gray('\n✓ Summary saved to notes. Use /note to view or continue discussion.'));
       }
     } else {
       console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one first.'));

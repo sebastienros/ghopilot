@@ -8,7 +8,8 @@ import {
   formatRepoName,
   parseRepoName,
   getRepoLocalPath,
-  getReposPath
+  getReposPath,
+  getRepoNameFromPath
 } from '../utils/config.js';
 import { select, input, search } from '@inquirer/prompts';
 
@@ -18,9 +19,20 @@ export const repoCommand: Command = {
   args: [
     { name: 'list|add|remove|select', description: 'Subcommand', required: false },
     { name: 'owner/repo', description: 'Repository name', required: false },
+    { name: '--path <path>', description: 'Local path for cloned/existing repository', required: false },
   ],
   async execute(args: string[], context: CommandContext) {
-    const [subcommand, name] = args;
+    // Parse --path option
+    const pathIndex = args.findIndex(a => a === '--path');
+    let customPath: string | undefined;
+    const filteredArgs = [...args];
+    
+    if (pathIndex !== -1 && args[pathIndex + 1]) {
+      customPath = args[pathIndex + 1];
+      filteredArgs.splice(pathIndex, 2);
+    }
+    
+    const [subcommand, name] = filteredArgs;
 
     if (!subcommand) {
       // Show interactive repository selector
@@ -33,7 +45,7 @@ export const repoCommand: Command = {
         await listRepositories(context);
         break;
       case 'add':
-        await addRepo(name, context);
+        await addRepo(name, context, customPath);
         break;
       case 'remove':
         await removeRepo(name, context);
@@ -48,7 +60,7 @@ export const repoCommand: Command = {
           await selectRepo(subcommand, context);
         } else {
           console.log(chalk.red(`Unknown subcommand: ${subcommand}`));
-          console.log('Usage: /repo [list|add|remove|select] [owner/repo]');
+          console.log('Usage: /repo [list|add|remove|select] [owner/repo] [--path <path>]');
         }
     }
   },
@@ -138,8 +150,19 @@ async function selectRepoInteractive(context: CommandContext): Promise<void> {
   }
 }
 
-async function addRepo(name: string | undefined, context: CommandContext): Promise<void> {
+async function addRepo(name: string | undefined, context: CommandContext, customPath?: string): Promise<void> {
   let repoName = name;
+  let parsed: { owner: string; repo: string } | null = null;
+  
+  // If only path is provided, try to extract repo name from git remote
+  if (!repoName && customPath) {
+    parsed = getRepoNameFromPath(customPath);
+    if (!parsed) {
+      console.log(chalk.red('Could not detect repository from path. Make sure it\'s a git repo with a GitHub remote.'));
+      return;
+    }
+    repoName = `${parsed.owner}/${parsed.repo}`;
+  }
   
   if (!repoName) {
     repoName = await input({
@@ -147,16 +170,23 @@ async function addRepo(name: string | undefined, context: CommandContext): Promi
     });
   }
 
-  const parsed = parseRepoName(repoName);
+  if (!parsed) {
+    parsed = parseRepoName(repoName);
+  }
+  
   if (!parsed) {
     console.log(chalk.red('Invalid repository format. Use owner/repo'));
     return;
   }
 
-  console.log(chalk.gray(`\nCloning ${repoName}...`));
+  if (customPath) {
+    console.log(chalk.gray(`\nAdding ${repoName} from ${customPath}...`));
+  } else {
+    console.log(chalk.gray(`\nCloning ${repoName}...`));
+  }
   
   try {
-    const result = await addRepository(context.config, parsed.owner, parsed.repo);
+    const result = await addRepository(context.config, parsed.owner, parsed.repo, customPath);
     await context.saveConfig();
     
     if (result.cloned) {
@@ -166,7 +196,7 @@ async function addRepo(name: string | undefined, context: CommandContext): Promi
     }
   } catch (error) {
     if (error instanceof Error) {
-      console.log(chalk.red(`Failed to clone repository: ${error.message}`));
+      console.log(chalk.red(`Failed to add repository: ${error.message}`));
     }
   }
 }

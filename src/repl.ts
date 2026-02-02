@@ -11,6 +11,9 @@ import { prCommand, prsCommand } from './commands/prs.js';
 import { worktreeCommand, worktreesCommand } from './commands/worktrees.js';
 import { helpCommand, exitCommand } from './commands/help.js';
 import { fixCommand, reviewCommand, testCommand, verifyCommand, checkoutCommand, submitPrCommand, explainCommand } from './commands/ai.js';
+import { noteCommand, notesCommand, clearNoteCommand } from './commands/notes.js';
+import { flagCommand, flaggedCommand, unflagCommand } from './commands/flag.js';
+import { pinCommand, unpinCommand } from './commands/pin.js';
 import { modelCommand, modelsCommand } from './commands/model.js';
 
 // Register all commands
@@ -34,6 +37,14 @@ registerCommand(verifyCommand);
 registerCommand(checkoutCommand);
 registerCommand(submitPrCommand);
 registerCommand(explainCommand);
+registerCommand(noteCommand);
+registerCommand(notesCommand);
+registerCommand(clearNoteCommand);
+registerCommand(flagCommand);
+registerCommand(flaggedCommand);
+registerCommand(unflagCommand);
+registerCommand(pinCommand);
+registerCommand(unpinCommand);
 registerCommand(modelCommand);
 registerCommand(modelsCommand);
 

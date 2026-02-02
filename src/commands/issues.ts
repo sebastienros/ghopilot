@@ -3,6 +3,7 @@ import { search } from '@inquirer/prompts';
 import type { Command, CommandContext, Issue } from '../types/index.js';
 import { listIssues, getIssue } from '../utils/github.js';
 import { checkAndSwitchWorktree } from './worktrees.js';
+import { getNote, isFlagged, toggleFlag, getFlaggedItems, isPinned } from '../utils/config.js';
 
 export const issueCommand: Command = {
   name: 'issue',
@@ -46,7 +47,7 @@ export const issuesCommand: Command = {
   name: 'issues',
   description: 'List issues in the active repository',
   args: [
-    { name: 'options', description: '--assignee <user>', required: false },
+    { name: 'options', description: '--assignee <user> | --flagged', required: false },
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
@@ -70,6 +71,30 @@ async function selectIssueInteractive(context: CommandContext): Promise<void> {
       return;
     }
 
+    // Check which issues have notes, flags, and pins
+    const issuesWithNotes = new Set<number>();
+    const flaggedIssues = new Set<number>();
+    const pinnedIssues = new Set<number>();
+    for (const issue of issues) {
+      const note = await getNote(repo.owner, repo.repo, issue.number);
+      if (note) issuesWithNotes.add(issue.number);
+      if (isFlagged(context.config, repo.owner, repo.repo, issue.number)) {
+        flaggedIssues.add(issue.number);
+      }
+      if (isPinned(context.config, repo.owner, repo.repo, issue.number)) {
+        pinnedIssues.add(issue.number);
+      }
+    }
+
+    // Sort issues with pinned at top
+    const sortedIssues = [...issues].sort((a, b) => {
+      const aPinned = pinnedIssues.has(a.number);
+      const bPinned = pinnedIssues.has(b.number);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
+
     const ac = new AbortController();
     
     // Listen for escape key to cancel
@@ -86,7 +111,7 @@ async function selectIssueInteractive(context: CommandContext): Promise<void> {
         source: async (input) => {
           const term = (input || '').toLowerCase();
           
-          return issues
+          return sortedIssues
             .filter(issue => {
               if (!term) return true;
               return issue.title.toLowerCase().includes(term) ||
@@ -94,7 +119,7 @@ async function selectIssueInteractive(context: CommandContext): Promise<void> {
                      issue.labels.some(l => l.toLowerCase().includes(term));
             })
             .map(issue => ({
-              name: formatIssueChoice(issue, context.config.activeIssue),
+              name: formatIssueChoice(issue, context.config.activeIssue, issuesWithNotes.has(issue.number), flaggedIssues.has(issue.number), pinnedIssues.has(issue.number)),
               value: issue.number,
             }));
         },
@@ -123,6 +148,8 @@ async function listIssuesCommand(args: string[], context: CommandContext): Promi
   
   // Parse options
   let assignee: string | undefined;
+  let flaggedOnly = false;
+  
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--assignee' && args[i + 1]) {
       assignee = args[i + 1];
@@ -134,7 +161,33 @@ async function listIssuesCommand(args: string[], context: CommandContext): Promi
         }
       }
       i++;
+    } else if (args[i] === '--flagged' || args[i] === '-f') {
+      flaggedOnly = true;
     }
+  }
+
+  // If flagged only, show flagged issues
+  if (flaggedOnly) {
+    const flaggedItems = getFlaggedItems(context.config, repo.owner, repo.repo, 'issue');
+    
+    if (flaggedItems.length === 0) {
+      console.log(chalk.yellow('\nNo flagged issues found.'));
+      console.log(chalk.gray('Use /flag to flag the active issue.\n'));
+      return;
+    }
+
+    console.log(chalk.bold('\n⭐ Flagged issues:\n'));
+    
+    for (const flagged of flaggedItems) {
+      const issue = await getIssue(repo, flagged.number);
+      if (issue) {
+        const note = await getNote(repo.owner, repo.repo, issue.number);
+        const pinned = isPinned(context.config, repo.owner, repo.repo, issue.number);
+        displayIssueLine(issue, context.config.activeIssue, !!note, true, pinned);
+      }
+    }
+    console.log();
+    return;
   }
 
   console.log(chalk.gray(`\nFetching issues from ${repo.owner}/${repo.repo}...\n`));
@@ -147,8 +200,32 @@ async function listIssuesCommand(args: string[], context: CommandContext): Promi
       return;
     }
 
+    // Check which issues have notes, flags, and pins
+    const issuesWithNotes = new Set<number>();
+    const flaggedIssues = new Set<number>();
+    const pinnedIssues = new Set<number>();
     for (const issue of issues) {
-      displayIssueLine(issue, context.config.activeIssue);
+      const note = await getNote(repo.owner, repo.repo, issue.number);
+      if (note) issuesWithNotes.add(issue.number);
+      if (isFlagged(context.config, repo.owner, repo.repo, issue.number)) {
+        flaggedIssues.add(issue.number);
+      }
+      if (isPinned(context.config, repo.owner, repo.repo, issue.number)) {
+        pinnedIssues.add(issue.number);
+      }
+    }
+
+    // Sort issues with pinned at top
+    const sortedIssues = [...issues].sort((a, b) => {
+      const aPinned = pinnedIssues.has(a.number);
+      const bPinned = pinnedIssues.has(b.number);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
+
+    for (const issue of sortedIssues) {
+      displayIssueLine(issue, context.config.activeIssue, issuesWithNotes.has(issue.number), flaggedIssues.has(issue.number), pinnedIssues.has(issue.number));
     }
     console.log();
   } catch (error) {
@@ -187,19 +264,25 @@ async function selectIssue(number: number, context: CommandContext): Promise<voi
   }
 }
 
-function formatIssueChoice(issue: Issue, activeNumber: number | null): string {
+function formatIssueChoice(issue: Issue, activeNumber: number | null, hasNotes: boolean = false, isFlagged: boolean = false, isPinned: boolean = false): string {
   const isActive = issue.number === activeNumber;
   const stateIcon = issue.state === 'OPEN' ? chalk.green('●') : chalk.red('●');
   const prefix = isActive ? chalk.cyan('▶ ') : '  ';
+  const pinIcon = isPinned ? chalk.magenta('📌 ') : '';
+  const flagIcon = isFlagged ? chalk.yellow('⭐ ') : '';
   const labels = issue.labels.length > 0 ? chalk.gray(` [${issue.labels.slice(0, 2).join(', ')}]`) : '';
+  const noteIcon = hasNotes ? chalk.yellow(' 📝') : '';
   
-  return prefix + stateIcon + ' ' + chalk.bold(`#${issue.number}`) + ' ' + issue.title + labels;
+  return prefix + pinIcon + flagIcon + stateIcon + ' ' + chalk.bold(`#${issue.number}`) + ' ' + issue.title + labels + noteIcon;
 }
 
-function displayIssueLine(issue: Issue, activeNumber: number | null): void {
+function displayIssueLine(issue: Issue, activeNumber: number | null, hasNotes: boolean = false, isFlagged: boolean = false, isPinned: boolean = false): void {
   const isActive = issue.number === activeNumber;
   const stateColor = issue.state === 'OPEN' ? chalk.green : chalk.red;
   const prefix = isActive ? chalk.cyan('● ') : '  ';
+  const pinIcon = isPinned ? chalk.magenta('📌 ') : '';
+  const flagIcon = isFlagged ? chalk.yellow('⭐ ') : '';
+  const noteIcon = hasNotes ? chalk.yellow(' 📝') : '';
   
   const labels = issue.labels.length > 0 
     ? chalk.gray(` [${issue.labels.join(', ')}]`) 
@@ -207,10 +290,13 @@ function displayIssueLine(issue: Issue, activeNumber: number | null): void {
   
   console.log(
     prefix +
+    pinIcon +
+    flagIcon +
     chalk.bold(`#${issue.number}`) + ' ' +
     stateColor(`[${issue.state}]`) + ' ' +
     issue.title +
-    labels
+    labels +
+    noteIcon
   );
 }
 
