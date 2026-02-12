@@ -1,33 +1,19 @@
-import { execSync, spawn } from 'child_process';
-import type { Issue, PullRequest, Repository } from '../types/index.js';
+import type { Issue, PullRequest, Repository } from '../types/index.ts';
 
 export function isGhInstalled(): boolean {
-  try {
-    execSync('gh --version', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  const proc = Bun.spawnSync(['gh', '--version'], { stdout: 'pipe', stderr: 'pipe' });
+  return proc.exitCode === 0;
 }
 
 export function isGhAuthenticated(): boolean {
-  try {
-    execSync('gh auth status', { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  const proc = Bun.spawnSync(['gh', 'auth', 'status'], { stdout: 'pipe', stderr: 'pipe' });
+  return proc.exitCode === 0;
 }
 
 export function getGitRepoFromCwd(): { owner: string; repo: string } | null {
   try {
-    // Get the remote URL from git
-    const remoteUrl = execSync('git remote get-url origin', { stdio: 'pipe', encoding: 'utf-8' }).trim();
-    
-    // Parse GitHub URL formats:
-    // https://github.com/owner/repo.git
-    // git@github.com:owner/repo.git
-    // https://github.com/owner/repo
+    const proc = Bun.spawnSync(['git', 'remote', 'get-url', 'origin'], { stdout: 'pipe', stderr: 'pipe' });
+    const remoteUrl = (proc.stdout?.toString() || '').trim();
     
     let match = remoteUrl.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(\.git)?$/);
     if (match) {
@@ -41,25 +27,21 @@ export function getGitRepoFromCwd(): { owner: string; repo: string } | null {
 }
 
 export async function runGh(args: string[], options?: { cwd?: string }): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('gh', args, { 
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: options?.cwd,
-    });
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve(stdout.trim());
-      } else {
-        reject(new Error(stderr || `gh exited with code ${code}`));
-      }
-    });
+  const proc = Bun.spawn(['gh', ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    cwd: options?.cwd,
   });
+  
+  const stdout = await new Response(proc.stdout).text();
+  const stderr = await new Response(proc.stderr).text();
+  const exitCode = await proc.exited;
+  
+  if (exitCode === 0) {
+    return stdout.trim();
+  } else {
+    throw new Error(stderr || `gh exited with code ${exitCode}`);
+  }
 }
 
 export async function listIssues(repo: Repository, assignee?: string): Promise<Issue[]> {

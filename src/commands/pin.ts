@@ -1,6 +1,6 @@
-import chalk from 'chalk';
-import type { Command, CommandContext } from '../types/index.js';
-import { togglePin, isPinned } from '../utils/config.js';
+import { bold, cyan, gray, green, yellow, red, magenta } from '../utils/colors.ts';
+import type { Command, CommandContext } from '../types/index.ts';
+import { togglePin, isPinned } from '../utils/config.ts';
 
 export const pinCommand: Command = {
   name: 'pin',
@@ -10,7 +10,7 @@ export const pinCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -22,7 +22,7 @@ export const pinCommand: Command = {
     if (args[0]) {
       number = parseInt(args[0], 10);
       if (isNaN(number)) {
-        console.log(chalk.red('Invalid number'));
+        console.log(red('Invalid number'));
         return;
       }
       // Try to determine type
@@ -36,7 +36,7 @@ export const pinCommand: Command = {
         number = context.config.activeIssue;
         type = 'issue';
       } else {
-        console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one.'));
+        console.log(yellow('No issue or PR selected. Use /issue or /pr to select one.'));
         return;
       }
     }
@@ -45,9 +45,9 @@ export const pinCommand: Command = {
     await context.saveConfig();
 
     if (result.pinned) {
-      console.log(chalk.green(`📌 Pinned #${number} to top of lists`));
+      console.log(green(`📌 Pinned #${number} to top of lists`));
     } else {
-      console.log(chalk.gray(`Unpinned #${number}`));
+      console.log(gray(`Unpinned #${number}`));
     }
   },
 };
@@ -60,7 +60,7 @@ export const unpinCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -71,7 +71,7 @@ export const unpinCommand: Command = {
     if (args[0]) {
       number = parseInt(args[0], 10);
       if (isNaN(number)) {
-        console.log(chalk.red('Invalid number'));
+        console.log(red('Invalid number'));
         return;
       }
     } else {
@@ -81,19 +81,22 @@ export const unpinCommand: Command = {
       } else if (context.config.activeIssue) {
         number = context.config.activeIssue;
       } else {
-        console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one.'));
+        console.log(yellow('No issue or PR selected. Use /issue or /pr to select one.'));
         return;
       }
     }
 
     if (!isPinned(context.config, repo.owner, repo.repo, number)) {
-      console.log(chalk.gray(`#${number} is not pinned.`));
+      console.log(gray(`#${number} is not pinned.`));
       return;
     }
 
     // Use togglePin to unpin (since it's currently pinned)
     togglePin(context.config, repo.owner, repo.repo, number, 'issue');
     await context.saveConfig();
-    console.log(chalk.gray(`Unpinned #${number}`));
+    console.log(gray(`Unpinned #${number}`));
   },
 };
+
+
+

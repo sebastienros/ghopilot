@@ -1,5 +1,5 @@
-import chalk from 'chalk';
-import type { Command, CommandContext } from '../types/index.js';
+import { bold, cyan, gray, green, yellow, red } from '../utils/colors.ts';
+import type { Command, CommandContext } from '../types/index.ts';
 import { 
   addRepository, 
   removeRepository, 
@@ -10,8 +10,8 @@ import {
   getRepoLocalPath,
   getReposPath,
   getRepoNameFromPath
-} from '../utils/config.js';
-import { select, input, search } from '@inquirer/prompts';
+} from '../utils/config.ts';
+import { selectPrompt, lineInput } from '../utils/ui.ts';
 
 export const repoCommand: Command = {
   name: 'repo',
@@ -59,7 +59,7 @@ export const repoCommand: Command = {
         if (parsed) {
           await selectRepo(subcommand, context);
         } else {
-          console.log(chalk.red(`Unknown subcommand: ${subcommand}`));
+          console.log(red(`Unknown subcommand: ${subcommand}`));
           console.log('Usage: /repo [list|add|remove|select] [owner/repo] [--path <path>]');
         }
     }
@@ -79,20 +79,20 @@ async function listRepositories(context: CommandContext): Promise<void> {
   const repos = getRecentRepositories(context.config);
   
   if (repos.length === 0) {
-    console.log(chalk.yellow('No repositories configured. Use /repo add <owner/repo> to add one.'));
+    console.log(yellow('No repositories configured. Use /repo add <owner/repo> to add one.'));
     return;
   }
 
-  console.log(chalk.bold('\nConfigured repositories:\n'));
+  console.log(bold('\nConfigured repositories:\n'));
   for (const repo of repos) {
     const name = formatRepoName(repo);
     const isActive = context.config.activeRepository?.owner === repo.owner && 
                      context.config.activeRepository?.repo === repo.repo;
     
     if (isActive) {
-      console.log(chalk.green(`  ● ${name}`) + chalk.gray(' (active)'));
+      console.log(green(`  ● ${name}`) + gray(' (active)'));
     } else {
-      console.log(chalk.gray(`  ○ ${name}`));
+      console.log(gray(`  ○ ${name}`));
     }
   }
   console.log();
@@ -102,37 +102,29 @@ async function selectRepoInteractive(context: CommandContext): Promise<void> {
   const repos = getRecentRepositories(context.config);
   
   if (repos.length === 0) {
-    console.log(chalk.yellow('No repositories configured. Use /repo add <owner/repo> to add one.'));
+    console.log(yellow('No repositories configured. Use /repo add <owner/repo> to add one.'));
     return;
   }
 
   try {
-    const selected = await search({
+    const choices = [
+      ...repos.map(repo => {
+        const name = formatRepoName(repo);
+        const isActive = context.config.activeRepository?.owner === repo.owner && 
+                       context.config.activeRepository?.repo === repo.repo;
+        return {
+          name: isActive 
+            ? green(`● ${name}`) + gray(' (active)')
+            : `○ ${name}`,
+          value: name,
+        };
+      }),
+      { name: gray('+ Add a new repository'), value: '__add__' },
+    ];
+
+    const selected = await selectPrompt({
       message: 'Select repository:',
-      source: async (input) => {
-        const term = (input || '').toLowerCase();
-        
-        const filtered = repos.filter(repo => {
-          if (!term) return true;
-          const name = formatRepoName(repo).toLowerCase();
-          return name.includes(term);
-        });
-        
-        return [
-          ...filtered.map(repo => {
-            const name = formatRepoName(repo);
-            const isActive = context.config.activeRepository?.owner === repo.owner && 
-                           context.config.activeRepository?.repo === repo.repo;
-            return {
-              name: isActive 
-                ? chalk.green(`● ${name}`) + chalk.gray(' (active)')
-                : `○ ${name}`,
-              value: name,
-            };
-          }),
-          { name: chalk.gray('+ Add a new repository'), value: '__add__' },
-        ];
-      },
+      choices,
     });
 
     if (selected === '__add__') {
@@ -142,7 +134,7 @@ async function selectRepoInteractive(context: CommandContext): Promise<void> {
       if (parsed) {
         selectRepository(context.config, parsed.owner, parsed.repo);
         await context.saveConfig();
-        console.log(chalk.green(`Selected: ${selected}`));
+        console.log(green(`Selected: ${selected}`));
       }
     }
   } catch (error) {
@@ -158,14 +150,14 @@ async function addRepo(name: string | undefined, context: CommandContext, custom
   if (!repoName && customPath) {
     parsed = getRepoNameFromPath(customPath);
     if (!parsed) {
-      console.log(chalk.red('Could not detect repository from path. Make sure it\'s a git repo with a GitHub remote.'));
+      console.log(red('Could not detect repository from path. Make sure it\'s a git repo with a GitHub remote.'));
       return;
     }
     repoName = `${parsed.owner}/${parsed.repo}`;
   }
   
   if (!repoName) {
-    repoName = await input({
+    repoName = await lineInput({
       message: 'Enter repository (owner/repo):',
     });
   }
@@ -175,14 +167,14 @@ async function addRepo(name: string | undefined, context: CommandContext, custom
   }
   
   if (!parsed) {
-    console.log(chalk.red('Invalid repository format. Use owner/repo'));
+    console.log(red('Invalid repository format. Use owner/repo'));
     return;
   }
 
   if (customPath) {
-    console.log(chalk.gray(`\nAdding ${repoName} from ${customPath}...`));
+    console.log(gray(`\nAdding ${repoName} from ${customPath}...`));
   } else {
-    console.log(chalk.gray(`\nCloning ${repoName}...`));
+    console.log(gray(`\nCloning ${repoName}...`));
   }
   
   try {
@@ -190,13 +182,13 @@ async function addRepo(name: string | undefined, context: CommandContext, custom
     await context.saveConfig();
     
     if (result.cloned) {
-      console.log(chalk.green(`✓ Cloned ${repoName} to ${result.localPath}`));
+      console.log(green(`✓ Cloned ${repoName} to ${result.localPath}`));
     } else {
-      console.log(chalk.green(`✓ Added ${repoName} (already exists at ${result.localPath})`));
+      console.log(green(`✓ Added ${repoName} (already exists at ${result.localPath})`));
     }
   } catch (error) {
     if (error instanceof Error) {
-      console.log(chalk.red(`Failed to add repository: ${error.message}`));
+      console.log(red(`Failed to add repository: ${error.message}`));
     }
   }
 }
@@ -210,26 +202,26 @@ async function removeRepo(name: string | undefined, context: CommandContext): Pr
       value: formatRepoName(r),
     }));
     
-    repoName = await select({
+    repoName = await selectPrompt({
       message: 'Select repository to remove:',
       choices,
     });
   }
 
   if (!repoName) {
-    console.log(chalk.yellow('No repositories to remove.'));
+    console.log(yellow('No repositories to remove.'));
     return;
   }
 
   const parsed = parseRepoName(repoName);
   if (!parsed) {
-    console.log(chalk.red('Invalid repository format. Use owner/repo'));
+    console.log(red('Invalid repository format. Use owner/repo'));
     return;
   }
 
   await removeRepository(context.config, parsed.owner, parsed.repo);
   await context.saveConfig();
-  console.log(chalk.green(`Removed ${repoName}`));
+  console.log(green(`Removed ${repoName}`));
 }
 
 async function selectRepo(name: string | undefined, context: CommandContext): Promise<void> {
@@ -242,20 +234,20 @@ async function selectRepo(name: string | undefined, context: CommandContext): Pr
       value: formatRepoName(r),
     }));
     
-    repoName = await select({
+    repoName = await selectPrompt({
       message: 'Select repository:',
       choices,
     });
   }
 
   if (!repoName) {
-    console.log(chalk.yellow('No repositories configured. Use /repo add <owner/repo> first.'));
+    console.log(yellow('No repositories configured. Use /repo add <owner/repo> first.'));
     return;
   }
 
   const parsed = parseRepoName(repoName);
   if (!parsed) {
-    console.log(chalk.red('Invalid repository format. Use owner/repo'));
+    console.log(red('Invalid repository format. Use owner/repo'));
     return;
   }
 
@@ -269,5 +261,6 @@ async function selectRepo(name: string | undefined, context: CommandContext): Pr
 
   selectRepository(context.config, parsed.owner, parsed.repo);
   await context.saveConfig();
-  console.log(chalk.green(`Selected ${repoName}`));
+  console.log(green(`Selected ${repoName}`));
 }
+

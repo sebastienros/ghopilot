@@ -1,10 +1,9 @@
-import chalk from 'chalk';
-import { spawnSync } from 'child_process';
-import * as path from 'path';
-import * as fs from 'fs';
-import type { Command, CommandContext, Worktree } from '../types/index.js';
-import { confirm } from '@inquirer/prompts';
-import { getRepoLocalPath, expandPath } from '../utils/config.js';
+import { bold, cyan, gray, green, yellow, red, magenta } from '../utils/colors.ts';
+import { join, dirname } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import type { Command, CommandContext, Worktree } from '../types/index.ts';
+import { getRepoLocalPath, expandPath } from '../utils/config.ts';
+import { confirmPrompt } from '../utils/ui.ts';
 
 // Validate branch name to prevent command injection
 function isValidBranchName(name: string): boolean {
@@ -56,14 +55,14 @@ export const worktreeCommand: Command = {
         if (number) {
           await removeWorktree(parseInt(number, 10), context);
         } else {
-          console.log(chalk.red('Usage: /worktree remove <number>'));
+          console.log(red('Usage: /worktree remove <number>'));
         }
         break;
       case 'clean':
         await cleanWorktrees(context);
         break;
       default:
-        console.log(chalk.red(`Unknown subcommand: ${subcommand}`));
+        console.log(red(`Unknown subcommand: ${subcommand}`));
         console.log('Usage: /worktree [list|remove|clean] [number]');
     }
   },
@@ -83,12 +82,11 @@ export function getWorktrees(context: CommandContext): Worktree[] {
   try {
     // Get git worktree list
     const repoPath = getRepoPath(context);
-    const result = spawnSync('git', ['worktree', 'list', '--porcelain'], { 
+    const result = Bun.spawnSync(['git', 'worktree', 'list', '--porcelain'], { 
       cwd: repoPath,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
+            stdout: 'pipe', stderr: 'pipe'
     });
-    const output = result.stdout || '';
+    const output = result.stdout?.toString() || '';
 
     const lines = output.split('\n');
     let currentWorktree: Partial<Worktree> = {};
@@ -134,18 +132,18 @@ export function getWorktreeForNumber(number: number, context: CommandContext): W
 
 export async function checkAndSwitchWorktree(number: number, context: CommandContext): Promise<boolean> {
   const worktree = getWorktreeForNumber(number, context);
-  if (worktree && fs.existsSync(worktree.path)) {
+  if (worktree && existsSync(worktree.path)) {
     context.setCwd(worktree.path);
-    console.log(chalk.cyan(`\n📁 Worktree exists for #${number}`));
-    console.log(chalk.gray(`   Path: ${worktree.path}`));
-    console.log(chalk.gray(`   Branch: ${worktree.branch}`));
+    console.log(cyan(`\n📁 Worktree exists for #${number}`));
+    console.log(gray(`   Path: ${worktree.path}`));
+    console.log(gray(`   Branch: ${worktree.branch}`));
     console.log();
-    console.log(chalk.gray('Available commands:'));
-    console.log(chalk.gray('  /fix      - Continue working on this issue'));
-    console.log(chalk.gray('  /review   - Review the current changes'));
-    console.log(chalk.gray('  /test     - Generate tests'));
-    console.log(chalk.gray('  /submit   - Submit a PR'));
-    console.log(chalk.gray('  /explain  - Explain the issue'));
+    console.log(gray('Available commands:'));
+    console.log(gray('  /fix      - Continue working on this issue'));
+    console.log(gray('  /review   - Review the current changes'));
+    console.log(gray('  /test     - Generate tests'));
+    console.log(gray('  /submit   - Submit a PR'));
+    console.log(gray('  /explain  - Explain the issue'));
     console.log();
     return true;
   }
@@ -153,8 +151,8 @@ export async function checkAndSwitchWorktree(number: number, context: CommandCon
 }
 
 export function getWorktreePath(repoName: string, number: number, basePath: string): string {
-  const parentDir = path.dirname(basePath);
-  return path.join(parentDir, `${repoName}-ghopilot-${number}`);
+  const parentDir = dirname(basePath);
+  return join(parentDir, `${repoName}-ghopilot-${number}`);
 }
 
 export async function createWorktree(
@@ -181,12 +179,12 @@ export async function createWorktree(
   }
   
   // Verify repo path exists, offer to clone if not
-  if (!fs.existsSync(repoPath)) {
-    console.log(chalk.yellow(`Repository not found at: ${repoPath}`));
+  if (!existsSync(repoPath)) {
+    console.log(yellow(`Repository not found at: ${repoPath}`));
     
-    const shouldClone = await confirm({
+    const shouldClone = await confirmPrompt({
       message: `Clone ${repo.owner}/${repo.repo}?`,
-      default: true,
+      defaultValue: true,
     });
     
     if (!shouldClone) {
@@ -194,17 +192,17 @@ export async function createWorktree(
     }
     
     // Clone the repository (safe - using array arguments)
-    const parentDir = path.dirname(repoPath);
-    fs.mkdirSync(parentDir, { recursive: true });
+    const parentDir = dirname(repoPath);
+    mkdirSync(parentDir, { recursive: true });
     
-    console.log(chalk.gray(`Cloning ${repo.owner}/${repo.repo}...`));
-    const cloneResult = spawnSync('gh', ['repo', 'clone', `${repo.owner}/${repo.repo}`, repoPath], {
-      stdio: 'inherit',
+    console.log(gray(`Cloning ${repo.owner}/${repo.repo}...`));
+    const cloneResult = Bun.spawnSync(['gh', 'repo', 'clone', `${repo.owner}/${repo.repo}`, repoPath], {
+      stdio: ['inherit', 'inherit', 'inherit'],
     });
     if (cloneResult.status !== 0) {
       throw new Error('Failed to clone repository');
     }
-    console.log(chalk.green(`✓ Cloned to ${repoPath}`));
+    console.log(green(`✓ Cloned to ${repoPath}`));
     
     // Update config with localPath
     const repoConfig = context.config.repositories.find(
@@ -217,28 +215,28 @@ export async function createWorktree(
   }
   
   // Check if worktree already exists
-  if (fs.existsSync(worktreePath)) {
-    console.log(chalk.yellow(`Worktree already exists at ${worktreePath}`));
+  if (existsSync(worktreePath)) {
+    console.log(yellow(`Worktree already exists at ${worktreePath}`));
     return worktreePath;
   }
 
   // Create worktree with new branch (safe - using array arguments)
-  const addResult = spawnSync('git', ['worktree', 'add', '-b', branchName, worktreePath], {
+  const addResult = Bun.spawnSync(['git', 'worktree', 'add', '-b', branchName, worktreePath], {
     cwd: repoPath,
-    stdio: 'inherit',
+    stdio: ['inherit', 'inherit', 'inherit'],
   });
   
-  if (addResult.status === 0) {
-    console.log(chalk.green(`Created worktree at ${worktreePath}`));
-    console.log(chalk.gray(`Branch: ${branchName}`));
+  if (addResult.exitCode === 0) {
+    console.log(green(`Created worktree at ${worktreePath}`));
+    console.log(gray(`Branch: ${branchName}`));
   } else {
     // Branch might already exist, try without -b
-    const addExistingResult = spawnSync('git', ['worktree', 'add', worktreePath, branchName], {
+    const addExistingResult = Bun.spawnSync(['git', 'worktree', 'add', worktreePath, branchName], {
       cwd: repoPath,
-      stdio: 'inherit',
+      stdio: ['inherit', 'inherit', 'inherit'],
     });
-    if (addExistingResult.status === 0) {
-      console.log(chalk.green(`Created worktree at ${worktreePath}`));
+    if (addExistingResult.exitCode === 0) {
+      console.log(green(`Created worktree at ${worktreePath}`));
     } else {
       throw new Error('Failed to create worktree');
     }
@@ -251,26 +249,26 @@ async function listWorktrees(context: CommandContext): Promise<void> {
   const worktrees = getWorktrees(context);
 
   if (worktrees.length === 0) {
-    console.log(chalk.yellow('\nNo ghopilot worktrees found.\n'));
+    console.log(yellow('\nNo ghopilot worktrees found.\n'));
     return;
   }
 
-  console.log(chalk.bold('\nghopilot worktrees:\n'));
+  console.log(bold('\nghopilot worktrees:\n'));
 
   for (const wt of worktrees) {
     const activeNumber = context.config.activeIssue || context.config.activePR;
     const isActive = wt.number === activeNumber;
-    const prefix = isActive ? chalk.cyan('● ') : '  ';
-    const exists = fs.existsSync(wt.path);
-    const status = exists ? '' : chalk.red(' (missing)');
+    const prefix = isActive ? cyan('● ') : '  ';
+    const exists = existsSync(wt.path);
+    const status = exists ? '' : red(' (missing)');
 
     console.log(
       prefix +
-      chalk.bold(`#${wt.number}`) + ' ' +
-      chalk.gray(wt.branch) +
+      bold(`#${wt.number}`) + ' ' +
+      gray(wt.branch) +
       status
     );
-    console.log(chalk.gray(`    ${wt.path}`));
+    console.log(gray(`    ${wt.path}`));
   }
   console.log();
 }
@@ -279,58 +277,58 @@ async function removeWorktree(number: number, context: CommandContext): Promise<
   const worktree = getWorktreeForNumber(number, context);
   
   if (!worktree) {
-    console.log(chalk.yellow(`No worktree found for #${number}`));
+    console.log(yellow(`No worktree found for #${number}`));
     return;
   }
 
   // Validate worktree path and branch
   if (!isValidPath(worktree.path) || !isValidBranchName(worktree.branch)) {
-    console.log(chalk.red('Invalid worktree path or branch name'));
+    console.log(red('Invalid worktree path or branch name'));
     return;
   }
 
-  const shouldDelete = await confirm({
+  const shouldDelete = await confirmPrompt({
     message: `Remove worktree for #${number} at ${worktree.path}?`,
-    default: false,
+    defaultValue: false,
   });
 
   if (!shouldDelete) {
-    console.log(chalk.gray('Cancelled.'));
+    console.log(gray('Cancelled.'));
     return;
   }
 
   try {
     const repoPath = getRepoPath(context);
-    const result = spawnSync('git', ['worktree', 'remove', worktree.path, '--force'], {
+    const result = Bun.spawnSync(['git', 'worktree', 'remove', worktree.path, '--force'], {
       cwd: repoPath,
-      stdio: 'pipe',
+      stdout: 'pipe', stderr: 'pipe',
     });
-    if (result.status === 0) {
-      console.log(chalk.green(`Removed worktree: ${worktree.path}`));
+    if (result.exitCode === 0) {
+      console.log(green(`Removed worktree: ${worktree.path}`));
     } else {
-      console.log(chalk.red(`Failed to remove worktree: ${worktree.path}`));
+      console.log(red(`Failed to remove worktree: ${worktree.path}`));
       return;
     }
 
     // Optionally delete the branch
-    const deleteBranch = await confirm({
+    const deleteBranch = await confirmPrompt({
       message: `Also delete branch ${worktree.branch}?`,
-      default: false,
+      defaultValue: false,
     });
 
     if (deleteBranch) {
-      const branchResult = spawnSync('git', ['branch', '-D', worktree.branch], {
+      const branchResult = Bun.spawnSync(['git', 'branch', '-D', worktree.branch], {
         cwd: repoPath,
-        stdio: 'pipe',
+        stdout: 'pipe', stderr: 'pipe',
       });
-      if (branchResult.status === 0) {
-        console.log(chalk.green(`Deleted branch: ${worktree.branch}`));
+      if (branchResult.exitCode === 0) {
+        console.log(green(`Deleted branch: ${worktree.branch}`));
       } else {
-        console.log(chalk.yellow(`Could not delete branch ${worktree.branch}`));
+        console.log(yellow(`Could not delete branch ${worktree.branch}`));
       }
     }
   } catch (error) {
-    console.log(chalk.red(`Failed to remove worktree: ${error}`));
+    console.log(red(`Failed to remove worktree: ${error}`));
   }
 }
 
@@ -338,23 +336,23 @@ async function cleanWorktrees(context: CommandContext): Promise<void> {
   const worktrees = getWorktrees(context);
 
   if (worktrees.length === 0) {
-    console.log(chalk.yellow('No ghopilot worktrees to clean.'));
+    console.log(yellow('No ghopilot worktrees to clean.'));
     return;
   }
 
-  console.log(chalk.yellow(`\nFound ${worktrees.length} ghopilot worktree(s):`));
+  console.log(yellow(`\nFound ${worktrees.length} ghopilot worktree(s):`));
   for (const wt of worktrees) {
-    console.log(chalk.gray(`  #${wt.number} - ${wt.path}`));
+    console.log(gray(`  #${wt.number} - ${wt.path}`));
   }
   console.log();
 
-  const shouldClean = await confirm({
+  const shouldClean = await confirmPrompt({
     message: 'Remove all ghopilot worktrees?',
-    default: false,
+    defaultValue: false,
   });
 
   if (!shouldClean) {
-    console.log(chalk.gray('Cancelled.'));
+    console.log(gray('Cancelled.'));
     return;
   }
 
@@ -363,23 +361,29 @@ async function cleanWorktrees(context: CommandContext): Promise<void> {
   for (const wt of worktrees) {
     // Validate path before removing
     if (!isValidPath(wt.path)) {
-      console.log(chalk.yellow(`Skipping invalid path: ${wt.path}`));
+      console.log(yellow(`Skipping invalid path: ${wt.path}`));
       continue;
     }
     
-    const result = spawnSync('git', ['worktree', 'remove', wt.path, '--force'], {
+    const result = Bun.spawnSync(['git', 'worktree', 'remove', wt.path, '--force'], {
       cwd: repoPath,
-      stdio: 'pipe',
+      stdout: 'pipe', stderr: 'pipe',
     });
-    if (result.status === 0) {
-      console.log(chalk.green(`Removed: ${wt.path}`));
+    if (result.exitCode === 0) {
+      console.log(green(`Removed: ${wt.path}`));
     } else {
-      console.log(chalk.yellow(`Could not remove: ${wt.path}`));
+      console.log(yellow(`Could not remove: ${wt.path}`));
     }
   }
 
   // Prune worktrees
-  spawnSync('git', ['worktree', 'prune'], { cwd: repoPath, stdio: 'pipe' });
+  Bun.spawnSync(['git', 'worktree', 'prune'], { cwd: repoPath, stdout: 'pipe', stderr: 'pipe' });
 
-  console.log(chalk.green('\nWorktree cleanup complete.'));
+  console.log(green('\nWorktree cleanup complete.'));
 }
+
+
+
+
+
+

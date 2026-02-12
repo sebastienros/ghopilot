@@ -1,6 +1,6 @@
-import chalk from 'chalk';
-import type { Command, CommandContext } from '../types/index.js';
-import { getAllCommands, formatCommandHelp } from './registry.js';
+import { bold, cyan, gray, green, yellow, red, magenta } from '../utils/colors.ts';
+import type { Command, CommandContext } from '../types/index.ts';
+import { getAllCommands, formatCommandHelp } from './registry.ts';
 
 export const helpCommand: Command = {
   name: 'help',
@@ -9,7 +9,7 @@ export const helpCommand: Command = {
   async execute(args: string[], context: CommandContext) {
     const commands = getAllCommands();
     
-    console.log(chalk.bold('\nAvailable commands:\n'));
+    console.log(bold('\nAvailable commands:\n'));
 
     // Group commands by category
     const repoCommands = commands.filter(c => ['repo', 'repos'].includes(c.name));
@@ -21,56 +21,56 @@ export const helpCommand: Command = {
     const otherCommands = commands.filter(c => ['help', 'exit', 'quit'].includes(c.name));
 
     if (repoCommands.length > 0) {
-      console.log(chalk.cyan('  Repository:'));
+      console.log(cyan('  Repository:'));
       for (const cmd of repoCommands) {
-        console.log(chalk.gray('    ' + formatCommandHelp(cmd)));
+        console.log(gray('    ' + formatCommandHelp(cmd)));
       }
     }
 
     if (issueCommands.length > 0) {
-      console.log(chalk.cyan('\n  Issues:'));
+      console.log(cyan('\n  Issues:'));
       for (const cmd of issueCommands) {
-        console.log(chalk.gray('    ' + formatCommandHelp(cmd)));
+        console.log(gray('    ' + formatCommandHelp(cmd)));
       }
     }
 
     if (prCommands.length > 0) {
-      console.log(chalk.cyan('\n  Pull Requests:'));
+      console.log(cyan('\n  Pull Requests:'));
       for (const cmd of prCommands) {
-        console.log(chalk.gray('    ' + formatCommandHelp(cmd)));
+        console.log(gray('    ' + formatCommandHelp(cmd)));
       }
     }
 
     if (worktreeCommands.length > 0) {
-      console.log(chalk.cyan('\n  Worktrees:'));
+      console.log(cyan('\n  Worktrees:'));
       for (const cmd of worktreeCommands) {
-        console.log(chalk.gray('    ' + formatCommandHelp(cmd)));
+        console.log(gray('    ' + formatCommandHelp(cmd)));
       }
     }
 
     if (aiCommands.length > 0) {
-      console.log(chalk.cyan('\n  AI Commands:'));
+      console.log(cyan('\n  AI Commands:'));
       for (const cmd of aiCommands) {
-        console.log(chalk.gray('    ' + formatCommandHelp(cmd)));
+        console.log(gray('    ' + formatCommandHelp(cmd)));
       }
     }
 
     if (configCommands.length > 0) {
-      console.log(chalk.cyan('\n  Configuration:'));
+      console.log(cyan('\n  Configuration:'));
       for (const cmd of configCommands) {
-        console.log(chalk.gray('    ' + formatCommandHelp(cmd)));
+        console.log(gray('    ' + formatCommandHelp(cmd)));
       }
     }
 
     if (otherCommands.length > 0) {
-      console.log(chalk.cyan('\n  Other:'));
+      console.log(cyan('\n  Other:'));
       for (const cmd of otherCommands) {
-        console.log(chalk.gray('    ' + formatCommandHelp(cmd)));
+        console.log(gray('    ' + formatCommandHelp(cmd)));
       }
     }
 
     console.log();
-    console.log(chalk.gray('  Type / to see this help. Press Ctrl+C to exit.\n'));
+    console.log(gray('  Type / to see this help. Press Ctrl+C to exit.\n'));
   },
 };
 
@@ -79,7 +79,10 @@ export const exitCommand: Command = {
   aliases: ['quit', 'q'],
   description: 'Exit ghopilot',
   async execute(_args: string[], _context: CommandContext) {
-    console.log(chalk.gray('\nGoodbye!\n'));
+    console.log(gray('\nGoodbye!\n'));
     process.exit(0);
   },
 };
+
+
+

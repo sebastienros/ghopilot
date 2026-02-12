@@ -1,9 +1,9 @@
-import chalk from 'chalk';
-import * as os from 'os';
-import * as path from 'path';
-import type { Command, CommandContext } from '../types/index.js';
-import { input } from '@inquirer/prompts';
-import { getReposPath } from '../utils/config.js';
+import { bold, cyan, gray, green, yellow, red, magenta } from '../utils/colors.ts';
+import { homedir } from 'os';
+import { join } from 'path';
+import type { Command, CommandContext } from '../types/index.ts';
+import { getReposPath } from '../utils/config.ts';
+import { lineInput } from '../utils/ui.ts';
 
 export const configCommand: Command = {
   name: 'config',
@@ -35,23 +35,23 @@ export const configCommand: Command = {
         await setReposPath(value, context);
         break;
       default:
-        console.log(chalk.red(`Unknown config key: ${key}`));
+        console.log(red(`Unknown config key: ${key}`));
         console.log('Available keys: username, prefix, repospath');
-        console.log(chalk.gray('Use /prompts to manage prompt templates.'));
+        console.log(gray('Use /prompts to manage prompt templates.'));
     }
   },
 };
 
 function showConfig(context: CommandContext): void {
-  console.log(chalk.bold('\nConfiguration:\n'));
+  console.log(bold('\nConfiguration:\n'));
   
-  console.log(chalk.gray('  username: '), context.config.username || chalk.yellow('(not set)'));
-  console.log(chalk.gray('  prefix:   '), context.config.branchPrefix || chalk.yellow('(not set)'));
-  console.log(chalk.gray('  repospath:'), getReposPath(context.config));
-  console.log(chalk.gray('  model:    '), context.config.defaultModel || chalk.yellow('(system default)'));
+  console.log(gray('  username: '), context.config.username || yellow('(not set)'));
+  console.log(gray('  prefix:   '), context.config.branchPrefix || yellow('(not set)'));
+  console.log(gray('  repospath:'), getReposPath(context.config));
+  console.log(gray('  model:    '), context.config.defaultModel || yellow('(system default)'));
   console.log();
-  console.log(chalk.gray('  Use /prompts to view and customize prompt templates.'));
-  console.log(chalk.gray('  Use /models to list available models.'));
+  console.log(gray('  Use /prompts to view and customize prompt templates.'));
+  console.log(gray('  Use /models to list available models.'));
   console.log();
 }
 
@@ -59,44 +59,49 @@ async function setUsername(value: string | undefined, context: CommandContext): 
   let username = value;
   
   if (!username) {
-    username = await input({
+    username = await lineInput({
       message: 'Enter your GitHub username:',
-      default: context.config.username || undefined,
+      defaultValue: context.config.username || undefined,
     });
   }
 
   context.config.username = username || null;
   await context.saveConfig();
-  console.log(chalk.green(`Username set to: ${username}`));
+  console.log(green(`Username set to: ${username}`));
 }
 
 async function setBranchPrefix(value: string | undefined, context: CommandContext): Promise<void> {
   let prefix = value;
   
   if (!prefix) {
-    prefix = await input({
+    prefix = await lineInput({
       message: 'Enter branch prefix:',
-      default: context.config.branchPrefix || context.config.username || undefined,
+      defaultValue: context.config.branchPrefix || context.config.username || undefined,
     });
   }
 
   context.config.branchPrefix = prefix || null;
   await context.saveConfig();
-  console.log(chalk.green(`Branch prefix set to: ${prefix}`));
+  console.log(green(`Branch prefix set to: ${prefix}`));
 }
 
 async function setReposPath(value: string | undefined, context: CommandContext): Promise<void> {
   let reposPath = value;
   
   if (!reposPath) {
-    const defaultPath = context.config.reposPath || path.join(os.homedir(), 'repos');
-    reposPath = await input({
+    const defaultPath = context.config.reposPath || join(homedir(), 'repos');
+    reposPath = await lineInput({
       message: 'Enter path for cloning repositories:',
-      default: defaultPath,
+      defaultValue: defaultPath,
     });
   }
 
   context.config.reposPath = reposPath || null;
   await context.saveConfig();
-  console.log(chalk.green(`Repositories path set to: ${reposPath}`));
+  console.log(green(`Repositories path set to: ${reposPath}`));
 }
+
+
+
+
+

@@ -1,9 +1,9 @@
-import chalk from 'chalk';
-import { search } from '@inquirer/prompts';
-import type { Command, CommandContext, PullRequest } from '../types/index.js';
-import { listPullRequests, getPullRequest } from '../utils/github.js';
-import { checkAndSwitchWorktree } from './worktrees.js';
-import { getNote, isFlagged, getFlaggedItems, isPinned } from '../utils/config.js';
+import { bold, cyan, gray, green, yellow, red, magenta } from '../utils/colors.ts';
+import type { Command, CommandContext, PullRequest } from '../types/index.ts';
+import { listPullRequests, getPullRequest } from '../utils/github.ts';
+import { checkAndSwitchWorktree } from './worktrees.ts';
+import { getNote, isFlagged, getFlaggedItems, isPinned } from '../utils/config.ts';
+import { selectPrompt } from '../utils/ui.ts';
 
 export const prCommand: Command = {
   name: 'pr',
@@ -14,7 +14,7 @@ export const prCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -38,7 +38,7 @@ export const prCommand: Command = {
       return;
     }
 
-    console.log(chalk.red(`Invalid argument: ${first}`));
+    console.log(red(`Invalid argument: ${first}`));
     console.log('Usage: /pr [list|<number>] [--author|--reviewer <user>]');
   },
 };
@@ -52,7 +52,7 @@ export const prsCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
     await listPRsCommand(args, context);
@@ -62,13 +62,13 @@ export const prsCommand: Command = {
 async function selectPRInteractive(context: CommandContext): Promise<void> {
   const repo = context.config.activeRepository!;
   
-  console.log(chalk.gray(`\nFetching PRs from ${repo.owner}/${repo.repo}...\n`));
+  console.log(gray(`\nFetching PRs from ${repo.owner}/${repo.repo}...\n`));
 
   try {
     const prs = await listPullRequests(repo);
     
     if (prs.length === 0) {
-      console.log(chalk.yellow('No pull requests found.'));
+      console.log(yellow('No pull requests found.'));
       return;
     }
 
@@ -96,51 +96,26 @@ async function selectPRInteractive(context: CommandContext): Promise<void> {
       return 0;
     });
 
-    const ac = new AbortController();
-    
-    // Listen for escape key to cancel
-    const escapeHandler = (data: Buffer) => {
-      if (data[0] === 27 && data.length === 1) {
-        ac.abort();
-      }
-    };
-    process.stdin.on('data', escapeHandler);
+    const choices = sortedPRs.map(pr => ({
+      name: formatPRChoice(pr, context.config.activePR, prsWithNotes.has(pr.number), flaggedPRs.has(pr.number), pinnedPRs.has(pr.number)),
+      value: pr.number,
+    }));
 
     try {
-      const selected = await search({
+      const selected = await selectPrompt({
         message: 'Select a pull request',
-        source: async (input) => {
-          const term = (input || '').toLowerCase();
-          
-          return sortedPRs
-            .filter(pr => {
-              if (!term) return true;
-              return pr.title.toLowerCase().includes(term) ||
-                     pr.number.toString().includes(term) ||
-                     pr.author.toLowerCase().includes(term) ||
-                     pr.labels.some(l => l.toLowerCase().includes(term));
-            })
-            .map(pr => ({
-              name: formatPRChoice(pr, context.config.activePR, prsWithNotes.has(pr.number), flaggedPRs.has(pr.number), pinnedPRs.has(pr.number)),
-              value: pr.number,
-            }));
-        },
-        theme: {
-          style: {
-            keysHelpTip: () => chalk.gray('↑↓ navigate • ⏎ select • esc cancel'),
-          },
-        },
-      }, { signal: ac.signal });
+        choices,
+      });
 
       if (selected) {
         await selectPR(selected, context);
       }
-    } finally {
-      process.stdin.removeListener('data', escapeHandler);
+    } catch {
+      // User cancelled
     }
   } catch (error) {
-    if (error instanceof Error && !error.message.includes('abort')) {
-      console.log(chalk.red(`Error: ${error.message}`));
+    if (error instanceof Error) {
+      console.log(red(`Error: ${error.message}`));
     }
   }
 }
@@ -159,7 +134,7 @@ async function listPRsCommand(args: string[], context: CommandContext): Promise<
       if (author === 'me') {
         author = context.config.username || undefined;
         if (!author) {
-          console.log(chalk.yellow('Username not configured. Use /config username <name> first.'));
+          console.log(yellow('Username not configured. Use /config username <name> first.'));
           return;
         }
       }
@@ -169,7 +144,7 @@ async function listPRsCommand(args: string[], context: CommandContext): Promise<
       if (reviewer === 'me') {
         reviewer = context.config.username || undefined;
         if (!reviewer) {
-          console.log(chalk.yellow('Username not configured. Use /config username <name> first.'));
+          console.log(yellow('Username not configured. Use /config username <name> first.'));
           return;
         }
       }
@@ -184,12 +159,12 @@ async function listPRsCommand(args: string[], context: CommandContext): Promise<
     const flaggedItems = getFlaggedItems(context.config, repo.owner, repo.repo, 'pr');
     
     if (flaggedItems.length === 0) {
-      console.log(chalk.yellow('\nNo flagged PRs found.'));
-      console.log(chalk.gray('Use /flag to flag the active PR.\n'));
+      console.log(yellow('\nNo flagged PRs found.'));
+      console.log(gray('Use /flag to flag the active PR.\n'));
       return;
     }
 
-    console.log(chalk.bold('\n⭐ Flagged PRs:\n'));
+    console.log(bold('\n⭐ Flagged PRs:\n'));
     
     for (const flagged of flaggedItems) {
       const pr = await getPullRequest(repo, flagged.number);
@@ -203,13 +178,13 @@ async function listPRsCommand(args: string[], context: CommandContext): Promise<
     return;
   }
 
-  console.log(chalk.gray(`\nFetching PRs from ${repo.owner}/${repo.repo}...\n`));
+  console.log(gray(`\nFetching PRs from ${repo.owner}/${repo.repo}...\n`));
 
   try {
     const prs = await listPullRequests(repo, { author, reviewer });
     
     if (prs.length === 0) {
-      console.log(chalk.yellow('No pull requests found.'));
+      console.log(yellow('No pull requests found.'));
       return;
     }
 
@@ -243,7 +218,7 @@ async function listPRsCommand(args: string[], context: CommandContext): Promise<
     console.log();
   } catch (error) {
     if (error instanceof Error) {
-      console.log(chalk.red(`Error: ${error.message}`));
+      console.log(red(`Error: ${error.message}`));
     }
   }
 }
@@ -251,11 +226,11 @@ async function listPRsCommand(args: string[], context: CommandContext): Promise<
 async function selectPR(number: number, context: CommandContext): Promise<void> {
   const repo = context.config.activeRepository!;
   
-  console.log(chalk.gray(`\nFetching PR #${number}...\n`));
+  console.log(gray(`\nFetching PR #${number}...\n`));
 
   const pr = await getPullRequest(repo, number);
   if (!pr) {
-    console.log(chalk.red(`PR #${number} not found`));
+    console.log(red(`PR #${number} not found`));
     return;
   }
 
@@ -271,35 +246,35 @@ async function selectPR(number: number, context: CommandContext): Promise<void> 
 
 function formatPRChoice(pr: PullRequest, activeNumber: number | null, hasNotes: boolean = false, isFlagged: boolean = false, isPinned: boolean = false): string {
   const isActive = pr.number === activeNumber;
-  const stateIcon = pr.state === 'OPEN' ? chalk.green('●') : pr.state === 'MERGED' ? chalk.magenta('●') : chalk.red('●');
-  const prefix = isActive ? chalk.cyan('▶ ') : '  ';
-  const pinIcon = isPinned ? chalk.magenta('📌 ') : '';
-  const flagIcon = isFlagged ? chalk.yellow('⭐ ') : '';
-  const draft = pr.isDraft ? chalk.gray(' [DRAFT]') : '';
-  const labels = pr.labels.length > 0 ? chalk.gray(` [${pr.labels.slice(0, 2).join(', ')}]`) : '';
-  const noteIcon = hasNotes ? chalk.yellow(' 📝') : '';
+  const stateIcon = pr.state === 'OPEN' ? green('●') : pr.state === 'MERGED' ? magenta('●') : red('●');
+  const prefix = isActive ? cyan('▶ ') : '  ';
+  const pinIcon = isPinned ? magenta('📌 ') : '';
+  const flagIcon = isFlagged ? yellow('⭐ ') : '';
+  const draft = pr.isDraft ? gray(' [DRAFT]') : '';
+  const labels = pr.labels.length > 0 ? gray(` [${pr.labels.slice(0, 2).join(', ')}]`) : '';
+  const noteIcon = hasNotes ? yellow(' 📝') : '';
   
-  return prefix + pinIcon + flagIcon + stateIcon + ' ' + chalk.bold(`#${pr.number}`) + ' ' + pr.title + draft + labels + noteIcon;
+  return prefix + pinIcon + flagIcon + stateIcon + ' ' + bold(`#${pr.number}`) + ' ' + pr.title + draft + labels + noteIcon;
 }
 
 function displayPRLine(pr: PullRequest, activeNumber: number | null, hasNotes: boolean = false, isFlagged: boolean = false, isPinned: boolean = false): void {
   const isActive = pr.number === activeNumber;
-  const stateColor = pr.state === 'OPEN' ? chalk.green : pr.state === 'MERGED' ? chalk.magenta : chalk.red;
-  const prefix = isActive ? chalk.cyan('● ') : '  ';
-  const pinIcon = isPinned ? chalk.magenta('📌 ') : '';
-  const flagIcon = isFlagged ? chalk.yellow('⭐ ') : '';
-  const draft = pr.isDraft ? chalk.gray(' [DRAFT]') : '';
-  const noteIcon = hasNotes ? chalk.yellow(' 📝') : '';
+  const stateColor = pr.state === 'OPEN' ? green : pr.state === 'MERGED' ? magenta : red;
+  const prefix = isActive ? cyan('● ') : '  ';
+  const pinIcon = isPinned ? magenta('📌 ') : '';
+  const flagIcon = isFlagged ? yellow('⭐ ') : '';
+  const draft = pr.isDraft ? gray(' [DRAFT]') : '';
+  const noteIcon = hasNotes ? yellow(' 📝') : '';
   
   const labels = pr.labels.length > 0 
-    ? chalk.gray(` [${pr.labels.join(', ')}]`) 
+    ? gray(` [${pr.labels.join(', ')}]`) 
     : '';
   
   console.log(
     prefix +
     pinIcon +
     flagIcon +
-    chalk.bold(`#${pr.number}`) + ' ' +
+    bold(`#${pr.number}`) + ' ' +
     stateColor(`[${pr.state}]`) + 
     draft + ' ' +
     pr.title +
@@ -309,20 +284,25 @@ function displayPRLine(pr: PullRequest, activeNumber: number | null, hasNotes: b
 }
 
 function displayPR(pr: PullRequest): void {
-  console.log(chalk.bold.cyan(`#${pr.number}`) + ' ' + chalk.bold(pr.title));
+  console.log(bold(cyan(`#${pr.number}`)) + ' ' + bold(pr.title));
   console.log();
   
-  const stateColor = pr.state === 'OPEN' ? chalk.green : pr.state === 'MERGED' ? chalk.magenta : chalk.red;
-  console.log(chalk.gray('  State:   '), stateColor(pr.state) + (pr.isDraft ? chalk.gray(' (DRAFT)') : ''));
-  console.log(chalk.gray('  Author:  '), pr.author);
-  console.log(chalk.gray('  Branch:  '), chalk.cyan(pr.headBranch), chalk.gray('→'), chalk.cyan(pr.baseBranch));
+  const stateColor = pr.state === 'OPEN' ? green : pr.state === 'MERGED' ? magenta : red;
+  console.log(gray('  State:   '), stateColor(pr.state) + (pr.isDraft ? gray(' (DRAFT)') : ''));
+  console.log(gray('  Author:  '), pr.author);
+  console.log(gray('  Branch:  '), cyan(pr.headBranch), gray('→'), cyan(pr.baseBranch));
   
   if (pr.reviewers.length > 0) {
-    console.log(chalk.gray('  Reviewers:'), pr.reviewers.join(', '));
+    console.log(gray('  Reviewers:'), pr.reviewers.join(', '));
   }
   if (pr.labels.length > 0) {
-    console.log(chalk.gray('  Labels:  '), pr.labels.join(', '));
+    console.log(gray('  Labels:  '), pr.labels.join(', '));
   }
-  console.log(chalk.gray('  URL:     '), chalk.blue.underline(pr.url));
+  console.log(gray('  URL:     '), cyan(pr.url));
   console.log();
 }
+
+
+
+
+

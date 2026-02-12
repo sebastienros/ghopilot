@@ -1,10 +1,9 @@
-import chalk from 'chalk';
-import { search, input } from '@inquirer/prompts';
-import type { Command, CommandContext, Note } from '../types/index.js';
-import { getNote, listNotes, addNoteEntry, saveNote, deleteNote } from '../utils/config.js';
-import { getIssue, getPullRequest } from '../utils/github.js';
-import { streamToConsole } from '../utils/copilot.js';
-import { getRepoLocalPath } from '../utils/config.js';
+import { bold, cyan, gray, green, yellow, red, magenta } from '../utils/colors.ts';
+import type { Command, CommandContext, Note } from '../types/index.ts';
+import { getNote, listNotes, addNoteEntry, saveNote, deleteNote } from '../utils/config.ts';
+import { getIssue, getPullRequest } from '../utils/github.ts';
+import { streamToConsole } from '../utils/copilot.ts';
+import { getRepoLocalPath } from '../utils/config.ts';
 
 function getRepoCwd(context: CommandContext): string | undefined {
   if (context.config.activeRepository) {
@@ -25,7 +24,7 @@ export const noteCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -33,7 +32,7 @@ export const noteCommand: Command = {
     const number = context.config.activePR || context.config.activeIssue;
     
     if (!number) {
-      console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one.'));
+      console.log(yellow('No issue or PR selected. Use /issue or /pr to select one.'));
       return;
     }
 
@@ -42,8 +41,8 @@ export const noteCommand: Command = {
 
     // If no note exists, show message
     if (!note) {
-      console.log(chalk.yellow(`\nNo notes for ${type} #${number} yet.`));
-      console.log(chalk.gray('Use /explain or /review first to create a summary.\n'));
+      console.log(yellow(`\nNo notes for ${type} #${number} yet.`));
+      console.log(gray('Use /explain or /review first to create a summary.\n'));
       return;
     }
 
@@ -64,7 +63,7 @@ export const notesCommand: Command = {
   description: 'List all notes for the active repository',
   async execute(_args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -72,25 +71,25 @@ export const notesCommand: Command = {
     const notes = await listNotes(repo.owner, repo.repo);
 
     if (notes.length === 0) {
-      console.log(chalk.yellow('\nNo notes found for this repository.'));
-      console.log(chalk.gray('Use /explain or /review on an issue/PR to create notes.\n'));
+      console.log(yellow('\nNo notes found for this repository.'));
+      console.log(gray('Use /explain or /review on an issue/PR to create notes.\n'));
       return;
     }
 
-    console.log(chalk.bold('\nNotes:\n'));
+    console.log(bold('\nNotes:\n'));
 
     for (const note of notes) {
-      const typeIcon = note.type === 'pr' ? chalk.magenta('PR') : chalk.green('Issue');
+      const typeIcon = note.type === 'pr' ? magenta('PR') : green('Issue');
       const activeNumber = context.config.activePR || context.config.activeIssue;
       const isActive = note.number === activeNumber;
-      const prefix = isActive ? chalk.cyan('● ') : '  ';
+      const prefix = isActive ? cyan('● ') : '  ';
       
       console.log(
         prefix +
         typeIcon + ' ' +
-        chalk.bold(`#${note.number}`) + ' ' +
+        bold(`#${note.number}`) + ' ' +
         note.title +
-        chalk.gray(` (${note.discussion.length} notes)`)
+        gray(` (${note.discussion.length} notes)`)
       );
     }
     console.log();
@@ -102,7 +101,7 @@ export const clearNoteCommand: Command = {
   description: 'Clear notes for the active issue/PR',
   async execute(_args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -110,15 +109,15 @@ export const clearNoteCommand: Command = {
     const number = context.config.activePR || context.config.activeIssue;
     
     if (!number) {
-      console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one.'));
+      console.log(yellow('No issue or PR selected. Use /issue or /pr to select one.'));
       return;
     }
 
     const deleted = await deleteNote(repo.owner, repo.repo, number);
     if (deleted) {
-      console.log(chalk.green(`✓ Notes cleared for #${number}`));
+      console.log(green(`✓ Notes cleared for #${number}`));
     } else {
-      console.log(chalk.yellow(`No notes found for #${number}`));
+      console.log(yellow(`No notes found for #${number}`));
     }
   },
 };
@@ -126,48 +125,35 @@ export const clearNoteCommand: Command = {
 async function displayNote(note: Note): Promise<void> {
   const typeLabel = note.type === 'pr' ? 'PR' : 'Issue';
   
-  console.log(chalk.bold.cyan(`\n${typeLabel} #${note.number}`) + ' ' + chalk.bold(note.title));
-  console.log(chalk.gray('─'.repeat(60)));
+  console.log(bold(cyan(`\n${typeLabel} #${note.number}`)) + ' ' + bold(note.title));
+  console.log(gray('─'.repeat(60)));
 
   // Show summary
   if (note.summary) {
-    console.log(chalk.bold('\n📋 Summary:\n'));
-    const { marked } = await import('marked');
-    const TerminalRenderer = (await import('marked-terminal')).default;
-    marked.setOptions({ renderer: new TerminalRenderer() as any });
-    const formatted = marked(note.summary) as string;
-    process.stdout.write(formatted);
+    console.log(bold('\n📋 Summary:\n'));
+    console.log(note.summary);
   }
 
   // Show review
   if (note.review) {
-    console.log(chalk.bold('\n🔍 Review:\n'));
-    const { marked } = await import('marked');
-    const TerminalRenderer = (await import('marked-terminal')).default;
-    marked.setOptions({ renderer: new TerminalRenderer() as any });
-    const formatted = marked(note.review) as string;
-    process.stdout.write(formatted);
+    console.log(bold('\n🔍 Review:\n'));
+    console.log(note.review);
   }
 
   // Show discussion
   if (note.discussion.length > 0) {
-    console.log(chalk.bold('\n💬 Discussion:\n'));
+    console.log(bold('\n💬 Discussion:\n'));
     for (const entry of note.discussion) {
-      const roleIcon = entry.role === 'user' ? chalk.cyan('You:') : chalk.green('AI:');
+      const roleIcon = entry.role === 'user' ? cyan('You:') : green('AI:');
       const time = new Date(entry.timestamp).toLocaleString();
-      console.log(roleIcon + chalk.gray(` (${time})`));
-      
-      const { marked } = await import('marked');
-      const TerminalRenderer = (await import('marked-terminal')).default;
-      marked.setOptions({ renderer: new TerminalRenderer() as any });
-      const formatted = marked(entry.content) as string;
-      process.stdout.write(formatted);
+      console.log(roleIcon + gray(` (${time})`));
+      console.log(entry.content);
       console.log();
     }
   }
 
-  console.log(chalk.gray('─'.repeat(60)));
-  console.log(chalk.gray('Use /note <message> to add a note or continue discussion.\n'));
+  console.log(gray('─'.repeat(60)));
+  console.log(gray('Use /note <message> to add a note or continue discussion.\n'));
 }
 
 async function continueDiscussion(note: Note, message: string, context: CommandContext): Promise<void> {
@@ -180,7 +166,7 @@ async function continueDiscussion(note: Note, message: string, context: CommandC
     timestamp: new Date().toISOString(),
   });
 
-  console.log(chalk.cyan('\n🤔 Thinking...\n'));
+  console.log(cyan('\n🤔 Thinking...\n'));
 
   // Build context for AI
   const issue = note.type === 'issue' 
@@ -269,8 +255,13 @@ Format your response EXACTLY as:
   if (updatedNote && newSummary !== note.summary) {
     updatedNote.summary = newSummary;
     await saveNote(updatedNote);
-    console.log(chalk.gray('\n✓ Summary updated.'));
+    console.log(gray('\n✓ Summary updated.'));
   }
 
   console.log();
 }
+
+
+
+
+

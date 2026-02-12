@@ -1,13 +1,11 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
-import { execSync } from 'child_process';
-import type { Config, Repository, Note, NoteEntry, FlaggedItem, PinnedItem } from '../types/index.js';
+import { join, dirname } from 'path';
+import { homedir } from 'os';
+import type { Config, Repository, Note, NoteEntry, FlaggedItem, PinnedItem } from '../types/index.ts';
 
-const CONFIG_DIR = path.join(os.homedir(), '.ghopilot');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
-const NOTES_DIR = path.join(CONFIG_DIR, 'notes');
-const DEFAULT_REPOS_PATH = path.join(os.homedir(), 'repos');
+const CONFIG_DIR = join(homedir(), '.ghopilot');
+const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
+const NOTES_DIR = join(CONFIG_DIR, 'notes');
+const DEFAULT_REPOS_PATH = join(homedir(), 'repos');
 
 const DEFAULT_CONFIG: Config = {
   repositories: [],
@@ -23,17 +21,15 @@ const DEFAULT_CONFIG: Config = {
 };
 
 export async function ensureConfigDir(): Promise<void> {
-  try {
-    await fs.mkdir(CONFIG_DIR, { recursive: true });
-  } catch {
-    // Directory already exists
-  }
+  const { mkdir } = await import('fs/promises');
+  await mkdir(CONFIG_DIR, { recursive: true });
 }
 
 export async function loadConfig(): Promise<Config> {
   await ensureConfigDir();
   try {
-    const data = await fs.readFile(CONFIG_FILE, 'utf-8');
+    const file = Bun.file(CONFIG_FILE);
+    const data = await file.text();
     const config = JSON.parse(data) as Partial<Config>;
     return { ...DEFAULT_CONFIG, ...config };
   } catch {
@@ -43,15 +39,15 @@ export async function loadConfig(): Promise<Config> {
 
 export async function saveConfig(config: Config): Promise<void> {
   await ensureConfigDir();
-  await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+  await Bun.write(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
 export function expandPath(p: string): string {
   if (p.startsWith('~/')) {
-    return path.join(os.homedir(), p.slice(2));
+    return join(homedir(), p.slice(2));
   }
   if (p === '~') {
-    return os.homedir();
+    return homedir();
   }
   return p;
 }
@@ -62,7 +58,7 @@ export function getReposPath(config: Config): string {
 }
 
 export function getRepoLocalPath(config: Config, owner: string, repo: string): string {
-  return path.join(getReposPath(config), owner, repo);
+  return join(getReposPath(config), owner, repo);
 }
 
 export async function addRepository(
@@ -71,6 +67,7 @@ export async function addRepository(
   repo: string, 
   customPath?: string
 ): Promise<{ config: Config; cloned: boolean; localPath: string }> {
+  const { mkdir, access } = await import('fs/promises');
   // Use custom path if provided, otherwise use default
   const localPath = customPath ? expandPath(customPath) : getRepoLocalPath(config, owner, repo);
   let cloned = false;
@@ -81,7 +78,7 @@ export async function addRepository(
   // Check if local path exists
   let localExists = false;
   try {
-    await fs.access(localPath);
+    await access(localPath);
     localExists = true;
   } catch {
     localExists = false;
@@ -90,13 +87,16 @@ export async function addRepository(
   // Clone if doesn't exist locally
   if (!localExists) {
     // Ensure parent directory exists
-    const parentDir = path.dirname(localPath);
-    await fs.mkdir(parentDir, { recursive: true });
+    const parentDir = dirname(localPath);
+    await mkdir(parentDir, { recursive: true });
     
     // Clone using gh CLI
-    execSync(`gh repo clone ${owner}/${repo} "${localPath}"`, {
-      stdio: 'inherit',
+    const proc = Bun.spawnSync(['gh', 'repo', 'clone', `${owner}/${repo}`, localPath], {
+      stdio: ['inherit', 'inherit', 'inherit'],
     });
+    if (proc.exitCode !== 0) {
+      throw new Error(`Failed to clone ${owner}/${repo}`);
+    }
     cloned = true;
   }
   
@@ -156,11 +156,12 @@ export function parseRepoName(name: string): { owner: string; repo: string } | n
 export function getRepoNameFromPath(repoPath: string): { owner: string; repo: string } | null {
   try {
     const expandedPath = expandPath(repoPath);
-    const remoteUrl = execSync('git remote get-url origin', {
+    const proc = Bun.spawnSync(['git', 'remote', 'get-url', 'origin'], {
       cwd: expandedPath,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const remoteUrl = (proc.stdout?.toString() || '').trim();
     
     // Parse GitHub URL formats:
     // https://github.com/owner/repo.git
@@ -198,18 +199,20 @@ export function formatBranchName(prefix: string, number: number): string {
 // Notes storage functions
 
 function getNoteFilePath(owner: string, repo: string, number: number): string {
-  return path.join(NOTES_DIR, owner, repo, `${number}.json`);
+  return join(NOTES_DIR, owner, repo, `${number}.json`);
 }
 
 export async function ensureNotesDir(owner: string, repo: string): Promise<void> {
-  const dir = path.join(NOTES_DIR, owner, repo);
-  await fs.mkdir(dir, { recursive: true });
+  const { mkdir } = await import('fs/promises');
+  const dir = join(NOTES_DIR, owner, repo);
+  await mkdir(dir, { recursive: true });
 }
 
 export async function getNote(owner: string, repo: string, number: number): Promise<Note | null> {
   const filePath = getNoteFilePath(owner, repo, number);
   try {
-    const data = await fs.readFile(filePath, 'utf-8');
+    const file = Bun.file(filePath);
+    const data = await file.text();
     return JSON.parse(data) as Note;
   } catch {
     return null;
@@ -220,7 +223,7 @@ export async function saveNote(note: Note): Promise<void> {
   await ensureNotesDir(note.owner, note.repo);
   const filePath = getNoteFilePath(note.owner, note.repo, note.number);
   note.updatedAt = new Date().toISOString();
-  await fs.writeFile(filePath, JSON.stringify(note, null, 2), 'utf-8');
+  await Bun.write(filePath, JSON.stringify(note, null, 2));
 }
 
 export async function createOrUpdateNote(
@@ -277,15 +280,16 @@ export async function addNoteEntry(
 }
 
 export async function listNotes(owner: string, repo: string): Promise<Note[]> {
-  const dir = path.join(NOTES_DIR, owner, repo);
+  const { readdir } = await import('fs/promises');
+  const dir = join(NOTES_DIR, owner, repo);
   try {
-    const files = await fs.readdir(dir);
+    const files = await readdir(dir);
     const notes: Note[] = [];
     
     for (const file of files) {
       if (file.endsWith('.json')) {
         try {
-          const data = await fs.readFile(path.join(dir, file), 'utf-8');
+          const data = await Bun.file(join(dir, file)).text();
           notes.push(JSON.parse(data) as Note);
         } catch {
           // Skip invalid files
@@ -302,9 +306,10 @@ export async function listNotes(owner: string, repo: string): Promise<Note[]> {
 }
 
 export async function deleteNote(owner: string, repo: string, number: number): Promise<boolean> {
+  const { unlink } = await import('fs/promises');
   const filePath = getNoteFilePath(owner, repo, number);
   try {
-    await fs.unlink(filePath);
+    await unlink(filePath);
     return true;
   } catch {
     return false;

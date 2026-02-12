@@ -1,7 +1,7 @@
-import chalk from 'chalk';
-import type { Command, CommandContext } from '../types/index.js';
-import { toggleFlag, getFlaggedItems, isFlagged } from '../utils/config.js';
-import { getIssue, getPullRequest } from '../utils/github.js';
+import { bold, cyan, gray, green, yellow, red, magenta } from '../utils/colors.ts';
+import type { Command, CommandContext } from '../types/index.ts';
+import { toggleFlag, getFlaggedItems, isFlagged } from '../utils/config.ts';
+import { getIssue, getPullRequest } from '../utils/github.ts';
 
 export const flagCommand: Command = {
   name: 'flag',
@@ -12,7 +12,7 @@ export const flagCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -24,7 +24,7 @@ export const flagCommand: Command = {
     if (args[0]) {
       number = parseInt(args[0], 10);
       if (isNaN(number)) {
-        console.log(chalk.red('Invalid number'));
+        console.log(red('Invalid number'));
         return;
       }
       // Try to determine type
@@ -38,7 +38,7 @@ export const flagCommand: Command = {
         number = context.config.activeIssue;
         type = 'issue';
       } else {
-        console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one.'));
+        console.log(yellow('No issue or PR selected. Use /issue or /pr to select one.'));
         return;
       }
     }
@@ -47,9 +47,9 @@ export const flagCommand: Command = {
     await context.saveConfig();
 
     if (result.flagged) {
-      console.log(chalk.green(`⭐ Flagged #${number}`));
+      console.log(green(`⭐ Flagged #${number}`));
     } else {
-      console.log(chalk.gray(`Unflagged #${number}`));
+      console.log(gray(`Unflagged #${number}`));
     }
   },
 };
@@ -60,7 +60,7 @@ export const flaggedCommand: Command = {
   description: 'List all flagged issues and PRs',
   async execute(_args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -68,25 +68,25 @@ export const flaggedCommand: Command = {
     const flaggedItems = getFlaggedItems(context.config, repo.owner, repo.repo);
 
     if (flaggedItems.length === 0) {
-      console.log(chalk.yellow('\nNo flagged items found.'));
-      console.log(chalk.gray('Use /flag to flag the active issue/PR.\n'));
+      console.log(yellow('\nNo flagged items found.'));
+      console.log(gray('Use /flag to flag the active issue/PR.\n'));
       return;
     }
 
-    console.log(chalk.bold('\n⭐ Flagged items:\n'));
+    console.log(bold('\n⭐ Flagged items:\n'));
 
     for (const flagged of flaggedItems) {
       if (flagged.type === 'issue') {
         const issue = await getIssue(repo, flagged.number);
         if (issue) {
           const isActive = context.config.activeIssue === flagged.number;
-          const prefix = isActive ? chalk.cyan('● ') : '  ';
-          const stateColor = issue.state === 'OPEN' ? chalk.green : chalk.red;
+          const prefix = isActive ? cyan('● ') : '  ';
+          const stateColor = issue.state === 'OPEN' ? green : red;
           console.log(
             prefix +
-            chalk.yellow('⭐ ') +
-            chalk.green('Issue ') +
-            chalk.bold(`#${issue.number}`) + ' ' +
+            yellow('⭐ ') +
+            green('Issue ') +
+            bold(`#${issue.number}`) + ' ' +
             stateColor(`[${issue.state}]`) + ' ' +
             issue.title
           );
@@ -95,13 +95,13 @@ export const flaggedCommand: Command = {
         const pr = await getPullRequest(repo, flagged.number);
         if (pr) {
           const isActive = context.config.activePR === flagged.number;
-          const prefix = isActive ? chalk.cyan('● ') : '  ';
-          const stateColor = pr.state === 'OPEN' ? chalk.green : pr.state === 'MERGED' ? chalk.magenta : chalk.red;
+          const prefix = isActive ? cyan('● ') : '  ';
+          const stateColor = pr.state === 'OPEN' ? green : pr.state === 'MERGED' ? magenta : red;
           console.log(
             prefix +
-            chalk.yellow('⭐ ') +
-            chalk.magenta('PR ') +
-            chalk.bold(`#${pr.number}`) + ' ' +
+            yellow('⭐ ') +
+            magenta('PR ') +
+            bold(`#${pr.number}`) + ' ' +
             stateColor(`[${pr.state}]`) + ' ' +
             pr.title
           );
@@ -120,7 +120,7 @@ export const unflagCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -131,7 +131,7 @@ export const unflagCommand: Command = {
     if (args[0]) {
       number = parseInt(args[0], 10);
       if (isNaN(number)) {
-        console.log(chalk.red('Invalid number'));
+        console.log(red('Invalid number'));
         return;
       }
     } else {
@@ -141,19 +141,23 @@ export const unflagCommand: Command = {
       } else if (context.config.activeIssue) {
         number = context.config.activeIssue;
       } else {
-        console.log(chalk.yellow('No issue or PR selected. Use /issue or /pr to select one.'));
+        console.log(yellow('No issue or PR selected. Use /issue or /pr to select one.'));
         return;
       }
     }
 
     if (!isFlagged(context.config, repo.owner, repo.repo, number)) {
-      console.log(chalk.gray(`#${number} is not flagged.`));
+      console.log(gray(`#${number} is not flagged.`));
       return;
     }
 
     // Use toggleFlag to unflag (since it's currently flagged)
     toggleFlag(context.config, repo.owner, repo.repo, number, 'issue');
     await context.saveConfig();
-    console.log(chalk.gray(`Unflagged #${number}`));
+    console.log(gray(`Unflagged #${number}`));
   },
 };
+
+
+
+

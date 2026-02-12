@@ -14,17 +14,16 @@ Interactive CLI for managing work across GitHub repositories with Copilot AI ass
 
 ```bash
 # Install globally
-npm install -g ghopilot
+bun install -g ghopilot
 
 # Or run from this directory
-npm install
-npm run build
-npm link
+bun install
+bun run start
 ```
 
 ## Requirements
 
-- Node.js 18+
+- [Bun](https://bun.sh/) 1.2+
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
 - GitHub Copilot subscription (for AI features)
 
@@ -169,16 +168,16 @@ With branch name:
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
-# Build
-npm run build
+# Run directly (no build step needed)
+bun run src/index.ts
 
 # Watch mode
-npm run dev
+bun run dev
 
-# Run locally
-node dist/index.js
+# Run tests
+bun test
 ```
 
 ## License

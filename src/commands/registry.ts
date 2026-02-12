@@ -1,4 +1,4 @@
-import type { Command, CommandContext } from '../types/index.js';
+import type { Command, CommandContext } from '../types/index.ts';
 
 const commands: Map<string, Command> = new Map();
 const aliases: Map<string, string> = new Map();

@@ -1,17 +1,18 @@
 import { CopilotClient, CopilotSession } from '@github/copilot-sdk';
 import type { SessionConfig, AssistantMessageEvent } from '@github/copilot-sdk';
-import chalk from 'chalk';
+import { gray, red, cyan } from './colors.ts';
 import { marked } from 'marked';
-import TerminalRenderer from 'marked-terminal';
 
-// Configure marked to use terminal renderer
-marked.setOptions({
-  renderer: new TerminalRenderer({
-    showSectionPrefix: false,
-    reflowText: true,
-    width: process.stdout.columns || 80,
-  }) as any,
-});
+// marked outputs HTML by default; we'll strip tags for terminal
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
 
 let client: CopilotClient | null = null;
 let currentSession: CopilotSession | null = null;
@@ -242,7 +243,7 @@ export async function streamToConsole(
       onThinking: (thinking) => {
         if (options.showThinking) {
           stopSpinner();
-          process.stdout.write(chalk.gray(thinking));
+          process.stdout.write(gray(thinking));
         }
       },
       onComplete: () => {
@@ -250,7 +251,7 @@ export async function streamToConsole(
         // Format and display the complete response
         if (fullContent) {
           if (options.formatMarkdown !== false) {
-            const formatted = marked(fullContent) as string;
+            const formatted = stripHtml(marked(fullContent) as string);
             process.stdout.write(formatted.trimEnd());
           } else {
             process.stdout.write(fullContent);
@@ -260,7 +261,7 @@ export async function streamToConsole(
       },
       onError: (error) => {
         stopSpinner();
-        console.error(chalk.red(`\nError: ${error.message}`));
+        console.error(red(`\nError: ${error.message}`));
       },
     });
   } finally {
@@ -287,3 +288,4 @@ export async function checkCopilotStatus(): Promise<{ available: boolean; authen
     };
   }
 }
+

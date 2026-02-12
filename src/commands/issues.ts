@@ -1,9 +1,9 @@
-import chalk from 'chalk';
-import { search } from '@inquirer/prompts';
-import type { Command, CommandContext, Issue } from '../types/index.js';
-import { listIssues, getIssue } from '../utils/github.js';
-import { checkAndSwitchWorktree } from './worktrees.js';
-import { getNote, isFlagged, toggleFlag, getFlaggedItems, isPinned } from '../utils/config.js';
+import { bold, cyan, gray, green, yellow, red, magenta } from '../utils/colors.ts';
+import type { Command, CommandContext, Issue } from '../types/index.ts';
+import { listIssues, getIssue } from '../utils/github.ts';
+import { checkAndSwitchWorktree } from './worktrees.ts';
+import { getNote, isFlagged, toggleFlag, getFlaggedItems, isPinned } from '../utils/config.ts';
+import { selectPrompt } from '../utils/ui.ts';
 
 export const issueCommand: Command = {
   name: 'issue',
@@ -14,7 +14,7 @@ export const issueCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
 
@@ -38,7 +38,7 @@ export const issueCommand: Command = {
       return;
     }
 
-    console.log(chalk.red(`Invalid argument: ${first}`));
+    console.log(red(`Invalid argument: ${first}`));
     console.log('Usage: /issue [list|<number>] [--assignee <user>]');
   },
 };
@@ -51,7 +51,7 @@ export const issuesCommand: Command = {
   ],
   async execute(args: string[], context: CommandContext) {
     if (!context.config.activeRepository) {
-      console.log(chalk.yellow('No repository selected. Use /repo select first.'));
+      console.log(yellow('No repository selected. Use /repo select first.'));
       return;
     }
     await listIssuesCommand(args, context);
@@ -61,13 +61,13 @@ export const issuesCommand: Command = {
 async function selectIssueInteractive(context: CommandContext): Promise<void> {
   const repo = context.config.activeRepository!;
   
-  console.log(chalk.gray(`\nFetching issues from ${repo.owner}/${repo.repo}...\n`));
+  console.log(gray(`\nFetching issues from ${repo.owner}/${repo.repo}...\n`));
 
   try {
     const issues = await listIssues(repo);
     
     if (issues.length === 0) {
-      console.log(chalk.yellow('No issues found.'));
+      console.log(yellow('No issues found.'));
       return;
     }
 
@@ -95,50 +95,26 @@ async function selectIssueInteractive(context: CommandContext): Promise<void> {
       return 0;
     });
 
-    const ac = new AbortController();
-    
-    // Listen for escape key to cancel
-    const escapeHandler = (data: Buffer) => {
-      if (data[0] === 27 && data.length === 1) {
-        ac.abort();
-      }
-    };
-    process.stdin.on('data', escapeHandler);
+    const choices = sortedIssues.map(issue => ({
+      name: formatIssueChoice(issue, context.config.activeIssue, issuesWithNotes.has(issue.number), flaggedIssues.has(issue.number), pinnedIssues.has(issue.number)),
+      value: issue.number,
+    }));
 
     try {
-      const selected = await search({
+      const selected = await selectPrompt({
         message: 'Select an issue',
-        source: async (input) => {
-          const term = (input || '').toLowerCase();
-          
-          return sortedIssues
-            .filter(issue => {
-              if (!term) return true;
-              return issue.title.toLowerCase().includes(term) ||
-                     issue.number.toString().includes(term) ||
-                     issue.labels.some(l => l.toLowerCase().includes(term));
-            })
-            .map(issue => ({
-              name: formatIssueChoice(issue, context.config.activeIssue, issuesWithNotes.has(issue.number), flaggedIssues.has(issue.number), pinnedIssues.has(issue.number)),
-              value: issue.number,
-            }));
-        },
-        theme: {
-          style: {
-            keysHelpTip: () => chalk.gray('↑↓ navigate • ⏎ select • esc cancel'),
-          },
-        },
-      }, { signal: ac.signal });
+        choices,
+      });
 
       if (selected) {
         await selectIssue(selected, context);
       }
-    } finally {
-      process.stdin.removeListener('data', escapeHandler);
+    } catch {
+      // User cancelled
     }
   } catch (error) {
-    if (error instanceof Error && !error.message.includes('abort')) {
-      console.log(chalk.red(`Error: ${error.message}`));
+    if (error instanceof Error) {
+      console.log(red(`Error: ${error.message}`));
     }
   }
 }
@@ -156,7 +132,7 @@ async function listIssuesCommand(args: string[], context: CommandContext): Promi
       if (assignee === 'me') {
         assignee = context.config.username || undefined;
         if (!assignee) {
-          console.log(chalk.yellow('Username not configured. Use /config username <name> first.'));
+          console.log(yellow('Username not configured. Use /config username <name> first.'));
           return;
         }
       }
@@ -171,12 +147,12 @@ async function listIssuesCommand(args: string[], context: CommandContext): Promi
     const flaggedItems = getFlaggedItems(context.config, repo.owner, repo.repo, 'issue');
     
     if (flaggedItems.length === 0) {
-      console.log(chalk.yellow('\nNo flagged issues found.'));
-      console.log(chalk.gray('Use /flag to flag the active issue.\n'));
+      console.log(yellow('\nNo flagged issues found.'));
+      console.log(gray('Use /flag to flag the active issue.\n'));
       return;
     }
 
-    console.log(chalk.bold('\n⭐ Flagged issues:\n'));
+    console.log(bold('\n⭐ Flagged issues:\n'));
     
     for (const flagged of flaggedItems) {
       const issue = await getIssue(repo, flagged.number);
@@ -190,13 +166,13 @@ async function listIssuesCommand(args: string[], context: CommandContext): Promi
     return;
   }
 
-  console.log(chalk.gray(`\nFetching issues from ${repo.owner}/${repo.repo}...\n`));
+  console.log(gray(`\nFetching issues from ${repo.owner}/${repo.repo}...\n`));
 
   try {
     const issues = await listIssues(repo, assignee);
     
     if (issues.length === 0) {
-      console.log(chalk.yellow('No issues found.'));
+      console.log(yellow('No issues found.'));
       return;
     }
 
@@ -230,7 +206,7 @@ async function listIssuesCommand(args: string[], context: CommandContext): Promi
     console.log();
   } catch (error) {
     if (error instanceof Error) {
-      console.log(chalk.red(`Error: ${error.message}`));
+      console.log(red(`Error: ${error.message}`));
     }
   }
 }
@@ -238,11 +214,11 @@ async function listIssuesCommand(args: string[], context: CommandContext): Promi
 async function selectIssue(number: number, context: CommandContext): Promise<void> {
   const repo = context.config.activeRepository!;
   
-  console.log(chalk.gray(`\nFetching issue #${number}...\n`));
+  console.log(gray(`\nFetching issue #${number}...\n`));
 
   const issue = await getIssue(repo, number);
   if (!issue) {
-    console.log(chalk.red(`Issue #${number} not found`));
+    console.log(red(`Issue #${number} not found`));
     return;
   }
 
@@ -257,42 +233,42 @@ async function selectIssue(number: number, context: CommandContext): Promise<voi
   
   // If no worktree, show available commands
   if (!switched) {
-    console.log(chalk.gray('Available commands:'));
-    console.log(chalk.gray('  /fix      - Start working on this issue'));
-    console.log(chalk.gray('  /explain  - Explain the issue'));
+    console.log(gray('Available commands:'));
+    console.log(gray('  /fix      - Start working on this issue'));
+    console.log(gray('  /explain  - Explain the issue'));
     console.log();
   }
 }
 
 function formatIssueChoice(issue: Issue, activeNumber: number | null, hasNotes: boolean = false, isFlagged: boolean = false, isPinned: boolean = false): string {
   const isActive = issue.number === activeNumber;
-  const stateIcon = issue.state === 'OPEN' ? chalk.green('●') : chalk.red('●');
-  const prefix = isActive ? chalk.cyan('▶ ') : '  ';
-  const pinIcon = isPinned ? chalk.magenta('📌 ') : '';
-  const flagIcon = isFlagged ? chalk.yellow('⭐ ') : '';
-  const labels = issue.labels.length > 0 ? chalk.gray(` [${issue.labels.slice(0, 2).join(', ')}]`) : '';
-  const noteIcon = hasNotes ? chalk.yellow(' 📝') : '';
+  const stateIcon = issue.state === 'OPEN' ? green('●') : red('●');
+  const prefix = isActive ? cyan('▶ ') : '  ';
+  const pinIcon = isPinned ? magenta('📌 ') : '';
+  const flagIcon = isFlagged ? yellow('⭐ ') : '';
+  const labels = issue.labels.length > 0 ? gray(` [${issue.labels.slice(0, 2).join(', ')}]`) : '';
+  const noteIcon = hasNotes ? yellow(' 📝') : '';
   
-  return prefix + pinIcon + flagIcon + stateIcon + ' ' + chalk.bold(`#${issue.number}`) + ' ' + issue.title + labels + noteIcon;
+  return prefix + pinIcon + flagIcon + stateIcon + ' ' + bold(`#${issue.number}`) + ' ' + issue.title + labels + noteIcon;
 }
 
 function displayIssueLine(issue: Issue, activeNumber: number | null, hasNotes: boolean = false, isFlagged: boolean = false, isPinned: boolean = false): void {
   const isActive = issue.number === activeNumber;
-  const stateColor = issue.state === 'OPEN' ? chalk.green : chalk.red;
-  const prefix = isActive ? chalk.cyan('● ') : '  ';
-  const pinIcon = isPinned ? chalk.magenta('📌 ') : '';
-  const flagIcon = isFlagged ? chalk.yellow('⭐ ') : '';
-  const noteIcon = hasNotes ? chalk.yellow(' 📝') : '';
+  const stateColor = issue.state === 'OPEN' ? green : red;
+  const prefix = isActive ? cyan('● ') : '  ';
+  const pinIcon = isPinned ? magenta('📌 ') : '';
+  const flagIcon = isFlagged ? yellow('⭐ ') : '';
+  const noteIcon = hasNotes ? yellow(' 📝') : '';
   
   const labels = issue.labels.length > 0 
-    ? chalk.gray(` [${issue.labels.join(', ')}]`) 
+    ? gray(` [${issue.labels.join(', ')}]`) 
     : '';
   
   console.log(
     prefix +
     pinIcon +
     flagIcon +
-    chalk.bold(`#${issue.number}`) + ' ' +
+    bold(`#${issue.number}`) + ' ' +
     stateColor(`[${issue.state}]`) + ' ' +
     issue.title +
     labels +
@@ -301,16 +277,21 @@ function displayIssueLine(issue: Issue, activeNumber: number | null, hasNotes: b
 }
 
 function displayIssue(issue: Issue): void {
-  console.log(chalk.bold.cyan(`#${issue.number}`) + ' ' + chalk.bold(issue.title));
+  console.log(bold(cyan(`#${issue.number}`)) + ' ' + bold(issue.title));
   console.log();
-  console.log(chalk.gray('  State:   '), issue.state === 'OPEN' ? chalk.green('OPEN') : chalk.red('CLOSED'));
-  console.log(chalk.gray('  Author:  '), issue.author);
+  console.log(gray('  State:   '), issue.state === 'OPEN' ? green('OPEN') : red('CLOSED'));
+  console.log(gray('  Author:  '), issue.author);
   if (issue.assignees.length > 0) {
-    console.log(chalk.gray('  Assigned:'), issue.assignees.join(', '));
+    console.log(gray('  Assigned:'), issue.assignees.join(', '));
   }
   if (issue.labels.length > 0) {
-    console.log(chalk.gray('  Labels:  '), issue.labels.join(', '));
+    console.log(gray('  Labels:  '), issue.labels.join(', '));
   }
-  console.log(chalk.gray('  URL:     '), chalk.blue.underline(issue.url));
+  console.log(gray('  URL:     '), cyan(issue.url));
   console.log();
 }
+
+
+
+
+

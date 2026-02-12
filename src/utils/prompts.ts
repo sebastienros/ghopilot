@@ -1,9 +1,8 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
-import type { Config, Repository, Issue, PullRequest } from '../types/index.js';
+import { join } from 'path';
+import { homedir } from 'os';
+import type { Config, Repository, Issue, PullRequest } from '../types/index.ts';
 
-const PROMPTS_DIR = path.join(os.homedir(), '.ghopilot', 'prompts');
+const PROMPTS_DIR = join(homedir(), '.ghopilot', 'prompts');
 
 export interface PromptTemplate {
   name: string;
@@ -238,11 +237,8 @@ Focus on helping someone quickly understand the changes.`,
 };
 
 export async function ensurePromptsDir(): Promise<void> {
-  try {
-    await fs.mkdir(PROMPTS_DIR, { recursive: true });
-  } catch {
-    // Directory already exists
-  }
+  const { mkdir } = await import('fs/promises');
+  await mkdir(PROMPTS_DIR, { recursive: true });
 }
 
 export function getDefaultPrompt(name: string): PromptTemplate | undefined {
@@ -255,8 +251,8 @@ export function getAllDefaultPrompts(): PromptTemplate[] {
 
 export async function getUserPrompt(name: string): Promise<string | null> {
   try {
-    const filePath = path.join(PROMPTS_DIR, `${name}.md`);
-    return await fs.readFile(filePath, 'utf-8');
+    const filePath = join(PROMPTS_DIR, `${name}.md`);
+    return await Bun.file(filePath).text();
   } catch {
     return null;
   }
@@ -281,14 +277,15 @@ export async function getPrompt(name: string): Promise<PromptTemplate | null> {
 
 export async function saveUserPrompt(name: string, content: string): Promise<void> {
   await ensurePromptsDir();
-  const filePath = path.join(PROMPTS_DIR, `${name}.md`);
-  await fs.writeFile(filePath, content, 'utf-8');
+  const filePath = join(PROMPTS_DIR, `${name}.md`);
+  await Bun.write(filePath, content);
 }
 
 export async function deleteUserPrompt(name: string): Promise<boolean> {
   try {
-    const filePath = path.join(PROMPTS_DIR, `${name}.md`);
-    await fs.unlink(filePath);
+    const { unlink } = await import('fs/promises');
+    const filePath = join(PROMPTS_DIR, `${name}.md`);
+    await unlink(filePath);
     return true;
   } catch {
     return false;

@@ -1,5 +1,4 @@
-import chalk from 'chalk';
-import gradientString from 'gradient-string';
+import { cyan, magenta, green, gray } from './colors.ts';
 
 const LOGO = `
    _____ _    _  ____  _____ _____ _      ____ _______ 
@@ -10,35 +9,42 @@ const LOGO = `
   \\_____|_|  |_|\\____/|_|   |_____|______\\____/  |_|   
 `;
 
-const gradient = gradientString(['#6e5494', '#0366d6', '#2ea44f']);
+const GRADIENT_COLORS = [magenta, cyan, green];
 
 export async function displayLogo(): Promise<void> {
   const lines = LOGO.split('\n');
   
-  // Clear any previous content and move cursor
   process.stdout.write('\n');
   
-  // Animate each line with a slight delay
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (line.trim()) {
-      process.stdout.write(gradient(line) + '\n');
+      const colorFn = GRADIENT_COLORS[i % GRADIENT_COLORS.length];
+      process.stdout.write(colorFn(line) + '\n');
       await sleep(50);
     }
   }
   
-  // Add tagline
   await sleep(100);
   console.log();
-  console.log(chalk.gray('  GitHub Repository Work Manager with Copilot AI'));
+  console.log(gray('  GitHub Repository Work Manager with Copilot AI'));
   console.log();
 }
 
 export function displayLogoSync(): void {
-  console.log(gradient(LOGO));
-  console.log(chalk.gray('  GitHub Repository Work Manager with Copilot AI'));
+  const lines = LOGO.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim()) {
+      const colorFn = GRADIENT_COLORS[i % GRADIENT_COLORS.length];
+      console.log(colorFn(line));
+    }
+  }
+  console.log(gray('  GitHub Repository Work Manager with Copilot AI'));
   console.log();
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
